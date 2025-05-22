@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<!-- Visualization & Content Choices:
+    - Report Info: RL Overview, Q-learning Intro, DQN Intro, Conclusion -> Goal: Inform -> Viz/Presentation: Text blocks -> Interaction: None -> Justification: Foundational context and summaries -> Library/Method: HTML.
+    - Report Info: Q-learning/DQN Core Concepts (State, Action, Reward, Q-value, Q-Table, Bellman Eq., Experience Replay, Target Networks) -> Goal: Inform, Organize -> Viz/Presentation: Structured text, definitions, formulas, conceptual HTML/CSS diagrams (e.g., Q-Table structure, Replay Buffer flow, Target Network concept) -> Interaction: Click to expand/collapse for detailed explanations (implemented as initially visible sections for simplicity in this version) -> Justification: Clear explanation of components, visual aids for complex ideas -> Library/Method: HTML, CSS.
+    - Report Info: Q-learning/DQN Algorithms -> Goal: Inform, Organize -> Viz/Presentation: Numbered lists/steps, conceptual HTML/CSS diagrams for algorithm flow/architecture -> Interaction: None (static presentation) -> Justification: Clear process flow -> Library/Method: HTML, CSS.
+    - Report Info: Q-learning/DQN Advantages & Limitations/Challenges -> Goal: Compare, Inform -> Viz/Presentation: Two-column layouts or bulleted lists -> Interaction: None -> Justification: Quick summary of pros and cons -> Library/Method: HTML.
+    - Report Info: Q-learning vs. DQN Comparison (Table 5 from report) -> Goal: Compare -> Viz/Presentation: HTML Table -> Interaction: None -> Justification: Direct, detailed comparison -> Library/Method: HTML.
+    - Report Info: Q-learning vs. DQN Visual Comparison -> Goal: Compare, Summarize visually -> Viz/Presentation: Radar Chart (Chart.js) comparing key aspects (State Space Handling, Generalization, Data Efficiency, Computational Cost, Learning Stability, Scalability) with qualitative scores. -> Interaction: Tooltips on hover -> Justification: Quick visual summary of key differences -> Library/Method: Chart.js, Canvas.
+    - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q-learning 与 DQN 交互式解析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-button.active {
+            border-bottom-width: 4px;
+        }
+        /* Chart container styling */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Max width for readability */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 400px; /* Max height */
+        }
+        @media (min-width: 768px) { /* md breakpoint */
+            .chart-container {
+                height: 350px;
+            }
+        }
+        @media (min-width: 1024px) { /* lg breakpoint */
+            .chart-container {
+                height: 400px;
+            }
+        }
+        .content-section h3 {
+            font-size: 1.5rem; /* 24px */
+            font-weight: 600;
+            color: #0F766E; /* teal-700 */
+            margin-top: 1.5rem; /* 24px */
+            margin-bottom: 0.75rem; /* 12px */
+            border-bottom: 2px solid #CCFBF1; /* teal-100 */
+            padding-bottom: 0.5rem; /* 8px */
+        }
+        .content-section h4 {
+            font-size: 1.25rem; /* 20px */
+            font-weight: 600;
+            color: #115E59; /* teal-800 */
+            margin-top: 1.25rem; /* 20px */
+            margin-bottom: 0.5rem; /* 8px */
+        }
+        .content-section p, .content-section ul, .content-section ol, .content-section table {
+            margin-bottom: 1rem; /* 16px */
+            line-height: 1.75;
+        }
+        .content-section ul {
+            list-style-type: disc;
+            margin-left: 1.5rem; /* 24px */
+        }
+         .content-section ol {
+            list-style-type: decimal;
+            margin-left: 1.5rem; /* 24px */
+        }
+        .content-section code {
+            background-color: #F3F4F6; /* gray-100 */
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+        }
+        .content-section .formula {
+            background-color: #E0F2F1; /* teal-50 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-family: 'Times New Roman', serif;
+            font-style: italic;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+        .content-section .table-container {
+            overflow-x: auto;
+        }
+        .content-section table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .content-section th, .content-section td {
+            border: 1px solid #D1D5DB; /* gray-300 */
+            padding: 0.75rem;
+            text-align: left;
+        }
+        .content-section th {
+            background-color: #F3F4F6; /* gray-100 */
+            font-weight: 600;
+        }
+        .conceptual-diagram {
+            background-color: #FDFBF6; /* amber-50 slightly adjusted */
+            border: 1px solid #FDE68A; /* amber-200 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .conceptual-diagram p {
+            margin-bottom: 0.5rem;
+            font-style: italic;
+            color: #78716C; /* stone-500 */
+        }
+        .conceptual-diagram .arrow {
+            font-size: 1.5rem;
+            color: #0D9488; /* teal-600 */
+            margin: 0 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-amber-50 text-neutral-800 min-h-screen flex flex-col items-center">
+
+    <header class="w-full bg-teal-700 text-white py-6 shadow-lg">
+        <h1 class="text-3xl font-bold text-center">Q-learning 与 Deep Q-learning 交互式解析</h1>
+    </header>
+
+    <nav class="w-full max-w-5xl bg-white shadow-md mt-4 rounded-lg sticky top-0 z-10">
+        <div class="flex justify-center border-b border-neutral-300">
+            <button data-tab="intro" class="tab-button active text-teal-600 hover:bg-teal-50 py-4 px-6 font-semibold border-teal-600">简介</button>
+            <button data-tab="qlearning" class="tab-button text-neutral-600 hover:text-teal-600 hover:bg-teal-50 py-4 px-6 font-semibold border-transparent">Q-learning</button>
+            <button data-tab="dqn" class="tab-button text-neutral-600 hover:text-teal-600 hover:bg-teal-50 py-4 px-6 font-semibold border-transparent">Deep Q-learning (DQN)</button>
+            <button data-tab="comparison" class="tab-button text-neutral-600 hover:text-teal-600 hover:bg-teal-50 py-4 px-6 font-semibold border-transparent">对比分析</button>
+            <button data-tab="conclusion" class="tab-button text-neutral-600 hover:text-teal-600 hover:bg-teal-50 py-4 px-6 font-semibold border-transparent">总结</button>
+        </div>
+    </nav>
+
+    <main class="w-full max-w-5xl p-4 sm:p-8 bg-white shadow-xl rounded-b-lg mb-8">
+        <div id="intro" class="tab-content active content-section">
+            <h3>I. 强化学习与基于价值的方法简介</h3>
+            <p>本应用旨在解析强化学习中的两个核心算法：Q-learning 及其基于深度学习的扩展 Deep Q-learning (DQN)。我们将深入探讨它们的概念、算法流程、关键技术以及各自的优缺点和适用场景。通过本应用，您将能够清晰地理解这两种方法如何使智能体在复杂环境中学习并做出最优决策。</p>
+            
+            <h4>A. 强化学习 (RL) 概述</h4>
+            <p>强化学习是人工智能的一个分支，专注于智能体如何通过与环境的交互来学习优化行为以获取最大化奖励。智能体在特定环境中执行动作，环境反馈奖励或惩罚，目标是学习一个策略，使其长期累积奖励最大化。强化学习的核心在于动态交互和最大化“长期累积奖励”，而非即时奖励，这要求智能体具备“远见”。</p>
+
+            <h4>B. Q-learning：一种基础的基于价值的算法</h4>
+            <p>Q-learning 是一种经典的无模型、基于价值、离策略的强化学习算法。它通过学习一个动作价值函数 $Q(s, a)$ 来估计在特定状态 $s$ 执行动作 $a$ 后能带来的预期累积奖励。其“无模型”特性意味着无需预知环境动态，“离策略”特性使其能从多样化经验中学习。</p>
+
+            <h4>C. 对更高级方法的需求：为 Deep Q-learning 铺平道路</h4>
+            <p>传统 Q-learning 在处理高维或连续状态空间时面临“可扩展性”挑战，主要是因为其依赖的 Q-table 规模会随状态和动作数量指数级增长（维度灾难）。这促使研究者转向参数化的函数逼近器，特别是深度神经网络，从而催生了 Deep Q-learning。</p>
+        </div>
+
+        <div id="qlearning" class="tab-content content-section">
+            <h3>II. Q-learning：基础与算法流程</h3>
+            <p>本部分详细介绍传统 Q-learning 的核心概念、Q-Table 的作用、Q 值更新的贝尔曼方程、完整的算法流程以及其主要的优势与局限性。理解这些基础知识对于后续学习 DQN 至关重要。</p>
+
+            <h4>A. 核心概念：状态、动作、奖励、策略与 Q 值</h4>
+            <ul>
+                <li><strong>状态 (State, $s$)</strong>: 智能体在环境中的当前情况或配置。</li>
+                <li><strong>动作 (Action, $a$)</strong>: 智能体在特定状态下可以执行的操作。</li>
+                <li><strong>奖励 (Reward, $r$)</strong>: 执行动作后从环境获得的即时反馈。</li>
+                <li><strong>策略 (Policy, $\pi$)</strong>: 智能体根据当前状态选择动作的规则。</li>
+                <li><strong>Q 值 ($Q(s,a)$)</strong>: 在状态 $s$ 采取动作 $a$ 的预期累积奖励。</li>
+            </ul>
+            <div class="conceptual-diagram">
+                <p>Q-Table 结构示意</p>
+                <span>状态 (行)</span> <span class="arrow">&times;</span> <span>动作 (列)</span> <span class="arrow">&rightarrow;</span> <span>Q 值</span>
+            </div>
+
+            <h4>B. Q-Table：表示状态-动作价值</h4>
+            <p>Q-Table 是一个二维表格，行代表状态，列代表动作，单元格 $(s,a)$ 存储对应的 Q 值。学习开始时通常初始化为零。通过与环境交互，Q-Table 中的值根据贝尔曼方程迭代更新。其显式性是特点也是局限性（可扩展性问题）。</p>
+
+            <h4>C. 贝尔曼方程：Q 值更新的基础</h4>
+            <p>Q-learning 使用贝尔曼最优方程更新 Q 值。公式如下：</p>
+            <div class="formula">
+                $Q(s, a) \leftarrow Q(s, a) + \alpha \cdot [r + \gamma \cdot \max_{a'} Q(s', a') - Q(s, a)]$
+            </div>
+            <p>其中：$\alpha$ 是学习率，$r$ 是即时奖励，$\gamma$ 是折扣因子，$s'$ 是下一状态，$\max_{a'} Q(s', a')$ 是下一状态的最大预期 Q 值。这一更新是时间差分 (TD) 学习的一个实例。</p>
+
+            <h4>D. Q-learning 算法</h4>
+            <ol>
+                <li>初始化 Q-Table (所有 $Q(s,a)$ 为0)，设置 $\alpha, \gamma$。</li>
+                <li>对于每个学习回合 (episode):
+                    <ol type="a">
+                        <li>初始化当前状态 $S$。</li>
+                        <li>对于回合中的每一步:
+                            <ol type="i">
+                                <li>根据当前状态 $S$ 和 Q-Table，使用 $\epsilon$-greedy 策略选择动作 $A$ (平衡探索与利用)。</li>
+                                <li>执行动作 $A$，观察奖励 $R$ 和新状态 $S'$。</li>
+                                <li>使用贝尔曼方程更新 $Q(S,A)$。</li>
+                                <li>$S \leftarrow S'$。</li>
+                            </ol>
+                        </li>
+                        <li>直到 $S$ 达到终止状态。</li>
+                    </ol>
+                </li>
+                <li>重复进行多个学习回合，直到 Q-Table 收敛。</li>
+            </ol>
+            <div class="conceptual-diagram">
+                <p>Q-learning 学习循环</p>
+                <span>观察状态 S</span> <span class="arrow">&rightarrow;</span> <span>($\epsilon$-greedy) 选择动作 A</span> <span class="arrow">&rightarrow;</span> <span>执行动作 A, 观察 R, S'</span> <span class="arrow">&rightarrow;</span> <span>更新 Q(S,A)</span> <span class="arrow">&circlearrowleft;</span>
+            </div>
+
+
+            <h4>E. 表格型 Q-learning 的优势与局限性</h4>
+            <p><strong>优势:</strong></p>
+            <ul>
+                <li>无模型 (Model-Free)</li>
+                <li>离策略学习 (Off-Policy Learning)</li>
+                <li>实现简单 (Simple Implementation)</li>
+                <li>收敛性保证 (理论上)</li>
+                <li>长期优化 (Long-term Optimization)</li>
+            </ul>
+            <p><strong>局限性:</strong></p>
+            <ul>
+                <li>可扩展性问题 (维度灾难)</li>
+                <li>离散空间限制 (Discrete Spaces)</li>
+                <li>无法处理未知状态 (缺乏泛化能力)</li>
+            </ul>
+        </div>
+
+        <div id="dqn" class="tab-content content-section">
+            <h3>III. Deep Q-learning (DQN)：利用神经网络扩展基于价值的方法</h3>
+            <p>DQN (Deep Q-Network) 通过使用深度神经网络来近似 Q 函数，克服了传统 Q-learning 在大规模状态空间中的局限性。本部分将介绍 DQN 的核心思想、关键创新技术（经验回放和目标网络）、算法流程及其优势与挑战。</p>
+
+            <h4>A. 克服传统 Q-learning 的局限性</h4>
+            <p>传统 Q-learning 的 Q-Table 在高维状态空间（如图像输入）下会变得不可行。DQN 使用神经网络作为函数逼近器，能够从高维输入中提取特征并估计 Q 值，同时具备泛化能力。</p>
+
+            <h4>B. Deep Q-Network 简介：用神经网络逼近 Q 值</h4>
+            <p>DQN 的核心思想是用深度神经网络 (DNN) 近似动作价值函数 $Q(s,a)$。网络输入状态，输出该状态下所有可能动作的 Q 值。DeepMind 团队成功将 DQN 应用于 Atari 游戏，展示了其强大能力。</p>
+            <div class="conceptual-diagram">
+                <p>DQN 核心思想</p>
+                <span>状态 (高维输入, e.g., 图像)</span> <span class="arrow">&rightarrow;</span> <span>[深度神经网络 (Q-Network)]</span> <span class="arrow">&rightarrow;</span> <span>Q 值 (所有动作)</span>
+            </div>
+
+            <h4>C. DQN 的关键创新</h4>
+            <p><strong>1. 经验回放 (Experience Replay)</strong></p>
+            <ul>
+                <li><strong>机制:</strong> 将经验元组 $(s_t, a_t, r_t, s_{t+1}, done)$ 存储在回放池中，训练时从中随机采样小批量数据。</li>
+                <li><strong>目的:</strong> 打破数据相关性，提高样本利用效率，稳定学习过程，避免灾难性遗忘。</li>
+            </ul>
+            <div class="conceptual-diagram">
+                <p>经验回放机制</p>
+                <span>智能体交互</span> <span class="arrow">&rightarrow;</span> <span>经验元组</span> <span class="arrow">&rightarrow;</span> <span>[经验回放池]</span> <span class="arrow">&rightarrow;</span> <span>随机小批量</span> <span class="arrow">&rightarrow;</span> <span>DQN 训练</span>
+            </div>
+            <p><strong>2. 目标网络 (Target Networks)</strong></p>
+            <ul>
+                <li><strong>机制:</strong> 使用一个独立的目标网络（参数 $\theta^-$ 定期从主 Q 网络参数 $\theta$ 复制）来计算目标 Q 值。主 Q 网络用于预测当前 Q 值。</li>
+                <li><strong>目的:</strong> 稳定训练过程，避免“追逐移动目标”导致的不稳定。</li>
+            </ul>
+             <div class="conceptual-diagram">
+                <p>目标网络机制</p>
+                <span>主 Q-Network ($\theta$, 频繁更新)</span> <span class="arrow" style="font-size:1rem; transform: rotate(90deg); display: inline-block;"> periodically copies to </span> <span>目标 Q-Network ($\theta^-$, 固定后更新)</span>
+                <p style="font-size:0.9rem; margin-top:0.5rem;">目标网络用于计算 $r + \gamma \max_{a'} \hat{Q}(s', a'; \theta^-)$ 中的 $\hat{Q}$</p>
+            </div>
+
+            <h4>D. DQN 算法</h4>
+            <ol>
+                <li>初始化经验回放池 $D$，主 Q 网络 $Q(\theta)$，目标网络 $\hat{Q}(\theta^-)$ (令 $\theta^- = \theta$)。</li>
+                <li>对于每个学习回合:
+                    <ol type="a">
+                        <li>获取初始状态 $s_1$，预处理得到 $\phi_1$。</li>
+                        <li>对于回合中的每一步 $t=1, \dots, T$:
+                            <ol type="i">
+                                <li>根据 $\phi_t$ 和 $Q(\phi_t, \cdot; \theta)$，使用 $\epsilon$-greedy 策略选择动作 $a_t$。</li>
+                                <li>执行 $a_t$，观察奖励 $r_t$ 和下一状态 $s_{t+1}$ (预处理为 $\phi_{t+1}$)。</li>
+                                <li>将经验 $(\phi_t, a_t, r_t, \phi_{t+1}, done\_flag)$ 存入 $D$。</li>
+                                <li>从 $D$ 中随机采样小批量经验 $(\phi_j, a_j, r_j, \phi_{j+1}, done_j)$。</li>
+                                <li>计算目标 Q 值 $y_j$: 若 $done_j$ 为真，则 $y_j = r_j$；否则 $y_j = r_j + \gamma \max_{a'} \hat{Q}(\phi_{j+1}, a'; \theta^-)$。</li>
+                                <li>计算损失 $L(\theta) = \mathbb{E}[(y_j - Q(\phi_j, a_j; \theta))^2]$。</li>
+                                <li>对 $L(\theta)$ 关于 $\theta$ 执行梯度下降更新 $\theta$。</li>
+                                <li>每隔 $C$ 步，更新目标网络参数：$\theta^- \leftarrow \theta$。</li>
+                            </ol>
+                        </li>
+                    </ol>
+                </li>
+                <li>重复进行多个学习回合。</li>
+            </ol>
+            <p>网络架构常使用卷积神经网络 (CNN) 处理视觉输入，输出各动作的 Q 值。</p>
+
+            <h4>E. Deep Q-Network 的优势与挑战</h4>
+            <p><strong>优势:</strong></p>
+            <ul>
+                <li>处理高维状态空间 (如图像)</li>
+                <li>强大的泛化能力</li>
+                <li>良好的可扩展性</li>
+                <li>可直接从奖励信号学习</li>
+            </ul>
+            <p><strong>挑战与局限性:</strong></p>
+            <ul>
+                <li>样本效率较低</li>
+                <li>Q 值过高估计偏差 (可通过 Double DQN 等改进)</li>
+                <li>处理连续动作空间不稳定 (标准 DQN 适用离散动作)</li>
+                <li>对超参数敏感</li>
+                <li>计算密集</li>
+                <li>训练稳定性问题 (虽有改进机制)</li>
+                <li>可解释性差 (“黑箱”模型)</li>
+            </ul>
+        </div>
+
+        <div id="comparison" class="tab-content content-section">
+            <h3>IV. 对比分析：Q-learning 与 Deep Q-Network</h3>
+            <p>本部分对传统的表格型 Q-learning 和基于深度学习的 DQN 进行直接比较，涵盖它们在状态空间表示、函数逼近方法、学习稳定性、计算复杂度、泛化能力等方面的关键差异。同时，我们还将通过一个雷达图直观展示这些差异，并讨论各自的适用场景。</p>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>特性</th>
+                            <th>Q-learning (表格型)</th>
+                            <th>Deep Q-Network (DQN)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>状态空间处理</strong></td>
+                            <td>适用于小型、离散状态空间</td>
+                            <td>能够处理高维、连续状态空间（输出离散动作）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>函数逼近器</strong></td>
+                            <td>Q-Table (显式表格)</td>
+                            <td>深度神经网络 $Q(s, a; \theta)$</td>
+                        </tr>
+                        <tr>
+                            <td><strong>核心机制</strong></td>
+                            <td>贝尔曼方程迭代更新 Q-Table</td>
+                            <td>经验回放、目标网络、神经网络优化</td>
+                        </tr>
+                        <tr>
+                            <td><strong>学习稳定性</strong></td>
+                            <td>相对稳定，有收敛保证（特定条件下）</td>
+                            <td>易不稳定，需特殊机制（经验回放、目标网络）维持稳定</td>
+                        </tr>
+                        <tr>
+                            <td><strong>可扩展性</strong></td>
+                            <td>差，受维度灾难限制</td>
+                            <td>好，能扩展到大规模状态空间</td>
+                        </tr>
+                        <tr>
+                            <td><strong>泛化能力</strong></td>
+                            <td>几乎没有，无法处理未见状态</td>
+                            <td>强，能泛化到相似的未见状态</td>
+                        </tr>
+                        <tr>
+                            <td><strong>数据效率</strong></td>
+                            <td>取决于状态-动作空间大小；对小空间可能较高效</td>
+                            <td>通常样本效率较低，需大量数据；经验回放可提升利用率</td>
+                        </tr>
+                        <tr>
+                            <td><strong>计算成本</strong></td>
+                            <td>Q-Table 内存成本高，单步更新计算量小</td>
+                            <td>神经网络训练计算成本高（前向/反向传播）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>可解释性</strong></td>
+                            <td>较高，Q-Table 直观</td>
+                            <td>较低，神经网络是“黑箱”</td>
+                        </tr>
+                        <tr>
+                            <td><strong>典型用例</strong></td>
+                            <td>简单棋盘游戏、小型控制问题</td>
+                            <td>复杂视频游戏（如 Atari）、机器人控制</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4>关键特性对比雷达图</h4>
+            <p>下图通过雷达图直观比较 Q-learning 和 DQN 在六个关键维度上的表现。分数越高代表在该维度上表现越好或能力越强（1=低/差, 5=高/好）。</p>
+            <div class="chart-container my-8">
+                <canvas id="comparisonRadarChart"></canvas>
+            </div>
+
+            <h4>F. Q-learning 相对于 DQN 的适用场景</h4>
+            <p>尽管 DQN 功能强大，但在以下场景，传统 Q-learning 可能更合适：</p>
+            <ul>
+                <li>状态和动作空间有限且离散。</li>
+                <li>环境简单且可预测。</li>
+                <li>计算资源受限。</li>
+                <li>对 Q 值的可解释性要求高。</li>
+                <li>问题复杂度不足以证明 DQN 的额外开销。</li>
+            </ul>
+            <p>选择哪种算法需根据具体问题特性权衡，体现了“没有免费午餐”原则。</p>
+        </div>
+
+        <div id="conclusion" class="tab-content content-section">
+            <h3>V. 结论：Q-learning 与 DQN 的重要性及演进</h3>
+            <p>Q-learning 作为强化学习的奠基性算法，为基于价值的学习提供了清晰的理论框架。它通过 Q-Table 和贝尔曼方程使智能体在离散环境中学习最优策略。其无模型和离策略特性使其应用广泛。</p>
+            <p>然而，传统 Q-learning 的可扩展性瓶颈催生了 DQN。DQN 将深度神经网络引入 Q-learning，将 Q 函数表示从表格转为参数化函数逼近器。结合经验回放和目标网络，DQN 克服了维度灾难，并展示了从高维原始感官输入（如像素）中学习复杂控制策略的能力，例如在 Atari 游戏中的突破性表现。</p>
+            <p>DQN 的成功标志着深度学习与强化学习的有效融合，引爆了深度强化学习的研究热潮。Q-learning 奠定了基础，DQN 扩展了应用边界，证明了智能体能从复杂高维感知数据中端到端学习有效决策策略。这一成就为后续更高级的深度强化学习算法（如 Double DQN, Dueling DQN, Prioritized Experience Replay 等）铺平了道路，并持续推动人工智能在游戏、机器人、自然语言处理等众多领域的探索与应用。</p>
+            <p>Q-learning 和 DQN 的发展清晰展示了强化学习从理论构建到解决日益复杂现实问题的演进轨迹。</p>
+        </div>
+    </main>
+
+    <footer class="w-full text-center py-4 text-neutral-600 text-sm">
+        <p>&copy; 2024 强化学习解析应用。内容基于提供的研究报告。</p>
+    </footer>
+
+    <script>
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(item => {
+                    item.classList.remove('active', 'text-teal-600', 'border-teal-600');
+                    item.classList.add('text-neutral-600', 'border-transparent');
+                });
+                tab.classList.add('active', 'text-teal-600', 'border-teal-600');
+                tab.classList.remove('text-neutral-600', 'border-transparent');
+
+                const targetTab = tab.getAttribute('data-tab');
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === targetTab) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+
+        // Radar Chart for Comparison
+        const ctxRadar = document.getElementById('comparisonRadarChart');
+        if (ctxRadar) {
+            new Chart(ctxRadar, {
+                type: 'radar',
+                data: {
+                    labels: [
+                        '状态空间处理', '泛化能力', '数据效率', 
+                        '计算成本 (低为优)', '学习稳定性', '可扩展性'
+                    ],
+                    datasets: [{
+                        label: 'Q-learning (表格型)',
+                        data: [1, 1, 3, 4, 4, 1], // 计算成本：4表示成本低(优)，1表示成本高(劣)
+                        fill: true,
+                        backgroundColor: 'rgba(251, 191, 36, 0.2)', // amber-400 with alpha
+                        borderColor: 'rgb(251, 191, 36)', // amber-400
+                        pointBackgroundColor: 'rgb(251, 191, 36)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(251, 191, 36)'
+                    }, {
+                        label: 'Deep Q-Network (DQN)',
+                        data: [5, 5, 2, 2, 3, 5], // 计算成本：2表示成本较高(劣)
+                        fill: true,
+                        backgroundColor: 'rgba(20, 184, 166, 0.2)', // teal-500 with alpha
+                        borderColor: 'rgb(20, 184, 166)', // teal-500
+                        pointBackgroundColor: 'rgb(20, 184, 166)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(20, 184, 166)'
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: {
+                                display: true
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 5,
+                            ticks: {
+                                stepSize: 1,
+                                backdropColor: 'rgba(255, 251, 235, 0.5)' // amber-50 with alpha for tick background
+                            },
+                            pointLabels: {
+                                font: {
+                                    size: 12 // Adjusted for Chinese characters
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.r !== null) {
+                                        label += context.parsed.r;
+                                        if (context.label === '计算成本 (低为优)') {
+                                            const score = context.parsed.r;
+                                            if (score === 5) label += ' (极低)';
+                                            else if (score === 4) label += ' (低)';
+                                            else if (score === 3) label += ' (中)';
+                                            else if (score === 2) label += ' (高)';
+                                            else if (score === 1) label += ' (极高)';
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

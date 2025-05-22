@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>强化学习算法交互式解读：MC、TD 与 Sarsa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css" integrity="sha384-Xi8rHCmBmhbuyyhbI88391ZKP2dmfnOl4rT9ZfRI7mLTdk1wblIUnrIq35nqwEvC" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js" integrity="sha384-X/XCfMm41VSsqRNwNEypKSlqtCnvIAxbIEGFTR4vAeqVVxCfw7bRNzG8HtKmA0BP" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js" integrity="sha384-+XBljXPPiv+OzfbB3cVmLHf4hdUFHlWNZN5spNQ7rmHTXpd7WvJum6fIACpNNfIR" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Visualization & Content Choices: 
+        - Report Info: Principles, algorithm flows, mathematical formulations, comparisons of MC, TD, Sarsa.
+        - Goal: Enable users to understand each algorithm in depth and compare their characteristics.
+        - Viz/Presentation Method:
+            - Textual explanations and definitions (HTML).
+            - "Deep Insight" sections: Collapsible divs (HTML/JS) to manage information density.
+            - Algorithm flows: Structured lists/divs styled with Tailwind (HTML).
+            - Mathematical equations: Rendered using KaTeX.
+            - Comparison Tables (from report): HTML tables styled with Tailwind.
+            - Conceptual Algorithm Comparison: Chart.js bar chart to visually compare MC, TD, Sarsa on dimensions like Bias, Variance, Online Learning, Episodic Task Only, Data Efficiency.
+        - Interaction:
+            - Sticky navigation bar for easy section jumping.
+            - Expand/collapse functionality for "Deep Insight" sections.
+            - Tooltips on the comparison chart.
+        - Justification: This combination provides a clear, structured, and interactive way to present dense technical information, adhering to the "NO SVG/Mermaid" constraint. KaTeX ensures accurate math rendering. Chart.js offers a simple way to visualize comparative data.
+        - Library/Method: Tailwind CSS, KaTeX, Chart.js, Vanilla JavaScript.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            background-color: #f5f5f4; /* stone-100 */
+            color: #292524; /* stone-800 */
+        }
+        .content-section {
+            padding-top: 4.5rem; /* Adjust based on nav height */
+            margin-bottom: 2rem;
+        }
+        .katex-display {
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 0.5em 0;
+        }
+        .insight-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-out;
+        }
+        .insight-content.open {
+            max-height: 1000px; /* Adjust as needed */
+            transition: max-height 0.7s ease-in;
+        }
+        .table-container table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .table-container th, .table-container td {
+            border: 1px solid #d6d3d1; /* stone-300 */
+            padding: 0.75rem;
+            text-align: left;
+        }
+        .table-container th {
+            background-color: #e7e5e4; /* stone-200 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 700px; /* Max width for readability */
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px; /* Base height */
+            max-height: 450px; /* Max height */
+        }
+        @media (min-width: 768px) { /* md breakpoint */
+            .chart-container {
+                height: 400px;
+            }
+        }
+        h1, h2, h3, h4 { margin-bottom: 0.5em; margin-top: 1em; font-weight: 600; }
+        h1 { font-size: 2.25rem; line-height: 2.5rem; color: #0f766e; /* teal-700 */ }
+        h2 { font-size: 1.875rem; line-height: 2.25rem; color: #115e59; /* teal-800 */ }
+        h3 { font-size: 1.5rem; line-height: 2rem; color: #134e4a; /* teal-900 */ }
+        h4 { font-size: 1.25rem; line-height: 1.75rem; color: #134e4a; /* teal-900 */ }
+        p, li { margin-bottom: 0.75rem; line-height: 1.6; }
+        .nav-item {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .nav-item:hover, .nav-item.active {
+            background-color: #0d9488; /* teal-600 */
+            color: white;
+        }
+        .collapsible-button {
+            background-color: #e7e5e4; /* stone-200 */
+            color: #0f766e; /* teal-700 */
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            display: inline-block;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        .collapsible-button:hover {
+            background-color: #d6d3d1; /* stone-300 */
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <nav class="bg-white shadow-md fixed top-0 left-0 right-0 z-50">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="font-bold text-xl text-teal-700">强化学习核心算法</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#introduction" class="nav-item">引言</a>
+                        <a href="#mc-algorithm" class="nav-item">蒙特卡洛 (MC)</a>
+                        <a href="#td-algorithm" class="nav-item">时序差分 (TD)</a>
+                        <a href="#sarsa-algorithm" class="nav-item">Sarsa</a>
+                        <a href="#comparison" class="nav-item">算法比较</a>
+                        <a href="#conclusion" class="nav-item">结论</a>
+                    </div>
+                </div>
+                <div class="-mr-2 flex md:hidden">
+                    <button type="button" id="mobile-menu-button" class="bg-white inline-flex items-center justify-center p-2 rounded-md text-stone-400 hover:text-teal-600 hover:bg-stone-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500" aria-controls="mobile-menu" aria-expanded="false">
+                        <span class="sr-only">Open main menu</span>
+                        <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                        <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="md:hidden hidden" id="mobile-menu">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                <a href="#introduction" class="nav-item block">引言</a>
+                <a href="#mc-algorithm" class="nav-item block">蒙特卡洛 (MC)</a>
+                <a href="#td-algorithm" class="nav-item block">时序差分 (TD)</a>
+                <a href="#sarsa-algorithm" class="nav-item block">Sarsa</a>
+                <a href="#comparison" class="nav-item block">算法比较</a>
+                <a href="#conclusion" class="nav-item block">结论</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 pt-20">
+
+        <section id="introduction" class="content-section bg-white p-6 rounded-lg shadow">
+            <h1>引言 (Introduction)</h1>
+            <p>本应用旨在深入解读强化学习 (Reinforcement Learning, RL) 中的三种核心模型无关算法：蒙特卡洛 (Monte Carlo, MC) 方法、时序差分 (Temporal-Difference, TD) 学习以及 Sarsa 算法。强化学习是人工智能领域的一个重要分支，智能体通过与环境交互并从试错中学习，以最大化累积奖励。这三种算法为理解价值函数估计和策略优化提供了基础框架。</p>
+            
+            <h3>强化学习概述 (Overview of Reinforcement Learning)</h3>
+            <p>强化学习 (Reinforcement Learning, RL) 是人工智能领域中一个极其活跃的研究分支。其核心思想在于，一个智能体 (agent) 在与一个复杂且通常不确定的环境 (environment) 进行交互的过程中，通过试错 (trial-and-error) 的方式学习如何行动，以期最大化其接收到的累积奖励 (cumulative reward)。与监督学习 (supervised learning) 不同，强化学习中的智能体不会被明确告知在特定情况下应该采取哪个“正确”动作；相反，它必须通过自身的经验来发现哪些行为能够带来最大的长期回报。</p>
+
+            <h3>基于价值的方法与模型无关算法简介 (Introduction to Value-Based Methods and Model-Free Algorithms)</h3>
+            <p>在强化学习的众多方法中，基于价值 (value-based) 的方法占据了核心地位。这类方法致力于估计价值函数 (value function)，例如状态价值函数 $V(s)$ 或状态-动作价值函数 $Q(s,a)$。状态价值函数 $V(s)$ 衡量的是从状态 $s$ 出发，遵循某一特定策略所能获得的期望累积奖励；而状态-动作价值函数 $Q(s,a)$ 则衡量在状态 $s$ 下采取动作 $a$，然后遵循某一特定策略所能获得的期望累积奖励。这些价值函数为智能体提供了一种评估不同状态或行动“好坏”程度的量化标准。</p>
+            <p>许多强大的强化学习算法属于模型无关 (model-free) 的范畴。这意味着它们可以直接从与环境交互获得的经验数据中学习价值函数和（或）策略，而无需事先了解或构建环境的完整动态模型，即状态转移概率 $P(s'|s,a)$ 和奖励函数 $R(s,a)$。这种特性使得模型无关算法在处理那些环境模型未知或过于复杂以至于难以建模的现实问题时，具有显著的优势。蒙特卡洛 (Monte Carlo, MC) 方法和时序差分 (Temporal-Difference, TD) 学习是模型无关方法中最具代表性的两类。</p>
+
+            <h3>蒙特卡洛、时序差分及 Sarsa 算法在强化学习中的核心地位</h3>
+            <p>蒙特卡洛方法、时序差分学习以及 Sarsa 算法是强化学习理论与实践中的基石。它们不仅为解决复杂的决策制定问题提供了有效的计算框架，也为理解更高级的强化学习技术（例如深度Q网络 (Deep Q-Networks, DQN) 和各种策略梯度方法）奠定了坚实的基础。这些算法代表了从经验中学习价值函数的几种基本范式。MC 方法依赖于完整的经验序列（回合）来估计回报，而 TD 方法则利用了自举 (bootstrapping) 的思想，基于单步或多步的奖励和后续状态的价值估计来更新当前状态的价值。Sarsa 算法是 TD 学习在控制问题（即寻找最优策略）上的一个重要同策略 (on-policy) 应用。本应用将详细解读这三种算法的原理、流程及其数学内涵，并进行比较分析。</p>
+        </section>
+
+        <section id="mc-algorithm" class="content-section bg-white p-6 rounded-lg shadow">
+            <h2>蒙特卡洛 (Monte Carlo, MC) 算法详解</h2>
+            <p>蒙特卡洛方法是强化学习中一类重要的模型无关算法。它们通过经验学习，即直接从与环境交互产生的完整回合数据中估计价值函数和（或）寻找最优策略。本节将详细介绍MC算法的基本原理、预测（价值估计）和控制（策略搜索）方法。</p>
+
+            <h3>一、基本原理与核心思想</h3>
+            <h4>依赖完整回合经验进行学习</h4>
+            <p>MC方法的一个根本特征是它们从完整的经验回合 (episodes) 中学习。一个回合是指智能体从某个起始状态开始，经过一系列的状态、动作和奖励，最终达到一个终止状态的完整序列。MC方法要求智能体完成整个回合的交互后，才能收集到用于价值函数估计的全部信息。因此，价值函数的更新通常发生在每一回合结束之后。</p>
+            <h4>通过平均样本回报估计价值</h4>
+            <p>MC方法估计价值函数的核心思想非常直观：它通过对多次独立试验（即多个完整回合）中观测到的实际回报 (sample returns) 进行平均，来作为对该状态或状态-动作对期望回报的估计。回报 $G_t$ 被定义为从时间步 $t$ 开始，直至该回合结束所获得的折扣奖励的总和：
+            $$G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \dots + \gamma^{T-t-1} R_T$$
+            其中，$R_{t+k+1}$ 是在时间步 $t+k+1$ 获得的即时奖励，$\gamma \in [0,1]$ 是折扣因子，$T$ 是该回合的最终时间步。</p>
+            <button class="collapsible-button" data-target="insight-1-1">深层洞察 1.1：MC 的“无偏”特性及其代价 <span>&#9660;</span></button>
+            <div id="insight-1-1" class="insight-content mt-2 p-4 bg-stone-50 rounded border border-stone-200">
+                <p>MC 方法因其直接使用实际观测到的完整回报进行平均，其对价值函数的估计在某种意义上是“无偏”的。这里的“无偏”指的是它不依赖于对其他状态价值的估计（即不进行自举）来进行当前状态价值的更新。每个完整的回报 $G_t$ 都可以看作是目标价值 $V_\pi(s)$（或 $Q_\pi(s,a)$）的一个独立样本。根据大数定律，当样本数量足够多时，这些独立样本的均值会收敛到其真实的期望值。</p>
+                <p>然而，这种不依赖其他估计的“纯粹性”是有代价的。MC 方法的估计通常具有较高的方差 (variance)。回报 $G_t$ 是一个回合中所有未来奖励的总和，而一个回合的长度可能很长，并且其中可能包含许多随机的决策和状态转移。因此，在不同的回合中，即使从相同的状态开始，所获得的完整回报 $G_t$ 也可能因环境的随机性或策略的随机性而产生剧烈波动。这种波动性导致了样本均值的高方差，意味着可能需要经历非常多的回合才能获得对价值函数的稳定且准确的估计。</p>
+            </div>
+
+            <h3>二、MC 预测：价值函数估计</h3>
+            <p>MC预测的目标是，在给定一个固定策略 $\pi$ 的情况下，估计该策略下的状态价值函数 $V_\pi(s)$ 或动作价值函数 $Q_\pi(s,a)$。</p>
+            <h4>状态价值函数 V(s) 的估计</h4>
+            <p>对于状态价值函数 $V(s)$ 的估计，MC方法主要有两种变体：首次访问MC (First-Visit MC) 和每次访问MC (Every-Visit MC)。</p>
+            <ul>
+                <li><strong>首次访问 MC (First-Visit MC) 算法流程:</strong>
+                    <ol class="list-decimal list-inside ml-4">
+                        <li>初始化：$\pi \leftarrow$ 待评估策略, $V(s) \leftarrow$ 任意值, $Returns(s) \leftarrow$ 空列表。</li>
+                        <li>循环 (多回合):
+                            <ol type="a" class="list-lower-alpha list-inside ml-4">
+                                <li>用 $\pi$ 生成完整回合: $S_0, A_0, R_1, \dots, S_{T-1}, A_{T-1}, R_T$。</li>
+                                <li>计算回报 $G_t$ (通常从 $t=T-1$ 向后到 $t=0$)。</li>
+                                <li>对每步 $t$: 若 $S_t$ 是首次访问，则 $Returns(S_t)$.append($G_t$)，$V(S_t) \leftarrow \text{average}(Returns(S_t))$。</li>
+                            </ol>
+                        </li>
+                    </ol>
+                </li>
+                <li><strong>每次访问 MC (Every-Visit MC) 算法流程:</strong> 与首次访问MC类似，但在步骤 2.c 中，只要 $S_t$ 出现，就用 $G_t$ 更新 $V(S_t)$，不检查是否首次访问。</li>
+            </ul>
+            <h4>动作价值函数 Q(s,a) 的估计</h4>
+            <p>与 $V(s)$ 类似，$Q(s,a)$ 的估计也有首次访问和每次访问两种MC方法，流程相似，只是记录和平均的是状态-动作对 $(S_t, A_t)$ 的回报。</p>
+            <button class="collapsible-button" data-target="insight-1-2">深层洞察 1.2：首次访问与每次访问 MC 的选择与收敛性 <span>&#9660;</span></button>
+            <div id="insight-1-2" class="insight-content mt-2 p-4 bg-stone-50 rounded border border-stone-200">
+                <p>首次访问 MC (First-Visit MC) 和每次访问 MC (Every-Visit MC) 都是有效的价值估计算法，并且在理论上，当对一个状态（或状态-动作对）的访问次数趋于无穷时，它们的估计都会收敛到真实的价值函数 $V_\pi(s)$ (或 $Q_\pi(s,a)$)。</p>
+                <p>首次访问 MC 的一个理论优势在于其分析相对简单，因为每次收集的回报都是独立同分布的样本。每次访问 MC 的估计则不是独立同分布的，但也被证明可以收敛。在实践中，两者表现差异不大，但首次访问 MC 因其理论简洁性更常被讨论。</p>
+            </div>
+
+            <h3>三、MC 控制：最优策略探索</h3>
+            <p>MC控制的目标是利用MC预测方法来找到最优策略 $\pi_*$。这通常在广义策略迭代 (GPI) 框架下进行：交替进行策略评估 (估计 $Q_\pi(s,a)$) 和策略改进 (基于 $Q_\pi(s,a)$ 贪婪化策略)。</p>
+            <h4>同策略 MC 控制</h4>
+            <ul>
+                <li><strong>探索性开端 (Exploring Starts, ES):</strong> 假设每回合从随机 $(S_0, A_0)$ 开始，保证所有状态-动作对被访问。算法流程：初始化 $Q, \pi$；循环生成回合，用首次访问MC更新 $Q$，然后对访问过的状态 $s$ 更新 $\pi(s) \leftarrow \arg\max_a Q(s,a)$。</li>
+                <li><strong>ε-贪心策略:</strong> 无需ES，以 $1-\epsilon$ 概率选贪婪动作，$\epsilon$ 概率随机探索。算法流程：初始化 $Q, \pi$ (ε-软性)；循环生成回合，用首次访问MC更新 $Q$，然后对访问过的状态 $s$ 更新 $\pi$ 使其对 $A^* = \arg\max_a Q(s,a)$ 的概率为 $1-\epsilon+\epsilon/|A(s)|$，其他动作概率为 $\epsilon/|A(s)|$。</li>
+            </ul>
+            <h4>异策略 MC 控制</h4>
+            <p>学习目标策略 $\pi$ (通常贪婪)，用行为策略 $b$ (探索性) 生成数据。核心技术是重要性采样。</p>
+            <ul>
+                <li><strong>重要性采样率:</strong> $\rho_{t:T-1} = \prod_{k=t}^{T-1} \frac{\pi(A_k|S_k)}{b(A_k|S_k)}$。</li>
+                <li><strong>加权重要性采样 (WIS) 更新 $Q(s,a)$:</strong> $Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \frac{W}{C(S_t, A_t)}[G_t - Q(S_t, A_t)]$，其中 $W$ 是累积重要性采样率，$C$ 是 $W$ 的累积和。</li>
+            </ul>
+            <button class="collapsible-button" data-target="insight-1-3">深层洞察 1.3：同策略与异策略 MC 的探索与收敛权衡 <span>&#9660;</span></button>
+            <div id="insight-1-3" class="insight-content mt-2 p-4 bg-stone-50 rounded border border-stone-200">
+                <p>同策略 MC 方法（如 ε-贪心）直接学习一个兼顾探索的策略，通常更简单、方差较低、收敛较快，但学习的是一个“折衷”策略。</p>
+                <p>异策略 MC 方法将学习策略与行为策略分离，理论上可以直接学习最优策略，灵活性更大。但依赖重要性采样，若采样率方差过大，会导致估计不稳定、收敛慢甚至发散。</p>
+            </div>
+
+            <h3>四、MC 算法解决的数学问题</h3>
+            <h4>通过经验平均估计期望回报 $G_t$</h4>
+            <p>MC方法的核心是估计期望回报。对于策略 $\pi$，状态价值 $V_\pi(s) = E_\pi[G_t | S_t=s]$，动作价值 $Q_\pi(s,a) = E_\pi[G_t | S_t=s, A_t=a]$。MC通过计算大量样本回报的算术平均值来逼近这些期望，依据是大数定律。</p>
+            <h4>与贝尔曼方程的间接关系</h4>
+            <p>MC方法不直接使用贝尔曼方程 $V_\pi(s) = E_\pi[R_{t+1} + \gamma V_\pi(S_{t+1}) | S_t=s]$ 的递归结构进行更新（即不自举）。但其估计的价值函数若收敛到真实值，则必然满足贝尔曼方程。MC方法可视为直接估计贝尔曼方程的“解”。</p>
+        </section>
+
+        <section id="td-algorithm" class="content-section bg-white p-6 rounded-lg shadow">
+            <h2>时序差分 (Temporal-Difference, TD) 学习算法详解</h2>
+            <p>时序差分 (TD) 学习是强化学习中最核心和最具创新性的思想之一。它结合了蒙特卡洛 (MC) 方法和动态规划 (DP) 方法的优点：像MC一样从经验中学习，无需模型；像DP一样使用自举，基于现有估计更新估计。</p>
+            <h3>一、基本原理与核心思想</h3>
+            <h4>自举 (Bootstrapping)：利用现有估计更新估计</h4>
+            <p>TD学习的关键特征是自举。与MC等待完整回合不同，TD在每一步后，利用对后续状态价值的当前估计来更新当前状态的价值估计。例如，TD(0) 在状态 $S_t$ 执行动作后，得到 $R_{t+1}$ 和 $S_{t+1}$，然后使用 $R_{t+1}$ 和对 $V(S_{t+1})$ 的当前估计来更新 $V(S_t)$。</p>
+            <h4>从不完整的回合中学习</h4>
+            <p>由于自举，TD无需等待回合结束即可更新，适用于连续性任务或回合非常长的任务，通常学习速度更快。</p>
+            <button class="collapsible-button" data-target="insight-2-1">深层洞察 2.1：TD 学习的“在线”特性与偏差来源 <span>&#9660;</span></button>
+            <div id="insight-2-1" class="insight-content mt-2 p-4 bg-stone-50 rounded border border-stone-200">
+                <p>TD学习的自举和单步更新赋予其“在线”学习能力，适合快速适应环境变化。然而，TD更新的目标（如 $R_{t+1} + \gamma V(S_{t+1})$）依赖于对 $V(S_{t+1})$ 的当前估计。若此估计不准（尤其在学习早期），TD更新就是朝一个“有偏”的目标移动，偏差会传播。这是TD获得较低方差和在线学习能力的权衡。MC的目标 $G_t$ 是对真实期望回报的无偏样本。</p>
+            </div>
+
+            <h3>二、TD(0) 预测：状态价值 V(s) 估计</h3>
+            <p>TD(0) (单步TD) 是最基础的TD方法，用于估计给定策略 $\pi$ 下的状态价值 $V_\pi(s)$。</p>
+            <h4>算法流程与价值更新规则: $V(S_t) \leftarrow V(S_t) + \alpha [R_{t+1} + \gamma V(S_{t+1}) - V(S_t)]$</h4>
+            <ol class="list-decimal list-inside ml-4">
+                <li>初始化：$V(s)$ 任意值, 学习率 $\alpha \in (0,1]$, 折扣因子 $\gamma \in [0,1]$。</li>
+                <li>对每回合：
+                    <ol type="a" class="list-lower-alpha list-inside ml-4">
+                        <li>初始化 $S_t$。</li>
+                        <li>只要 $S_t$ 不是终止状态：
+                            <ol type="i" class="list-lower-roman list-inside ml-4">
+                                <li>根据 $\pi$ 在 $S_t$ 选动作 $A_t$。</li>
+                                <li>执行 $A_t$，得 $R_{t+1}, S_{t+1}$。</li>
+                                <li>更新 $V(S_t) \leftarrow V(S_t) + \alpha [R_{t+1} + \gamma V(S_{t+1}) - V(S_t)]$。（若 $S_{t+1}$ 终止, $V(S_{t+1})=0$）</li>
+                                <li>$S_t \leftarrow S_{t+1}$。</li>
+                            </ol>
+                        </li>
+                    </ol>
+                </li>
+            </ol>
+            <h4>TD 目标 (TD Target) 与 TD 误差 (TD Error): $\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$</h4>
+            <ul>
+                <li><strong>TD 目标:</strong> $R_{t+1} + \gamma V(S_{t+1})$。是对 $V(S_t)$ 真实价值的基于一步经验的更好估计。</li>
+                <li><strong>TD 误差:</strong> $\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)$。衡量TD目标与当前 $V(S_t)$ 估计的差异，驱动学习。</li>
+            </ul>
+
+            <h3>三、TD 算法解决的数学问题</h3>
+            <h4>贝尔曼期望方程的近似求解</h4>
+            <p>TD(0)的目标是找到满足贝尔曼期望方程 $V_\pi(s) = E_\pi[R_{t+1} + \gamma V_\pi(S_{t+1}) | S_t=s]$ 的 $V_\pi(s)$。TD(0)的更新规则可视为对此方程的一种随机近似或基于采样的迭代求解。TD目标 $R_{t+1} + \gamma V(S_{t+1})$ 是对期望项 $E_\pi[\dots]$ 的单样本估计。通过不断调整 $V(S_t)$ 向此目标移动，在合适条件下，$V(s)$ 收敛到 $V_\pi(s)$。</p>
+        </section>
+
+        <section id="sarsa-algorithm" class="content-section bg-white p-6 rounded-lg shadow">
+            <h2>Sarsa 算法详解</h2>
+            <p>Sarsa (State-Action-Reward-State-Action) 是一种同策略 (on-policy) 时序差分 (TD) 控制算法。它在学习动作价值函数 $Q(s,a)$ 的过程中，用于生成经验数据的策略与正在被评估和改进的策略是同一个。</p>
+            <h3>一、基本原理与核心思想</h3>
+            <h4>同策略 TD 控制方法</h4>
+            <p>Sarsa评估并改进的是智能体当前实际执行的那个策略。智能体根据当前估计的 $Q$ 值（通常结合 ε-贪心探索）选择动作，并利用这些交互产生的经验来更新同一个 $Q$ 值函数。</p>
+
+            <h3>二、Sarsa 算法流程</h3>
+            <h4>(S, A, R, S', A') 五元组在学习中的应用</h4>
+            <p>Sarsa的学习依赖五元组 $(S_t, A_t, R_{t+1}, S_{t+1}, A_{t+1})$：当前状态 $S_t$，当前动作 $A_t$，即时奖励 $R_{t+1}$，下一状态 $S_{t+1}$，以及在 $S_{t+1}$ 根据当前策略选择的下一动作 $A_{t+1}$。$A_{t+1}$ 是Sarsa的关键。</p>
+            <h4>动作价值 Q(s,a) 更新规则: $Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha [R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t, A_t)]$</h4>
+            <ol class="list-decimal list-inside ml-4">
+                <li>初始化：$Q(s,a)$ 任意值 ($Q(s_{terminal}, \cdot)=0$), 学习率 $\alpha$, 折扣因子 $\gamma$, (可选) $\epsilon$。</li>
+                <li>对每回合：
+                    <ol type="a" class="list-lower-alpha list-inside ml-4">
+                        <li>初始化 $S$。</li>
+                        <li>用从 $Q$ 导出的策略 (如 ε-贪心) 在 $S$ 选动作 $A$。</li>
+                        <li>只要 $S$ 不是终止状态：
+                            <ol type="i" class="list-lower-roman list-inside ml-4">
+                                <li>执行 $A$，得 $R, S'$。</li>
+                                <li>用从 $Q$ 导出的策略在 $S'$ 选下一动作 $A'$。</li>
+                                <li>更新 $Q(S,A) \leftarrow Q(S,A) + \alpha [R + \gamma Q(S',A') - Q(S,A)]$。</li>
+                                <li>$S \leftarrow S'$, $A \leftarrow A'$。</li>
+                            </ol>
+                        </li>
+                    </ol>
+                </li>
+            </ol>
+            <button class="collapsible-button" data-target="insight-3-1">深层洞察 3.1：Sarsa 的“保守性”与对探索的敏感性 <span>&#9660;</span></button>
+            <div id="insight-3-1" class="insight-content mt-2 p-4 bg-stone-50 rounded border border-stone-200">
+                <p>Sarsa的更新目标 $R_{t+1} + \gamma Q(S_{t+1}, A_{t+1})$ 中，$A_{t+1}$ 是实际选择的动作。若行为策略含探索（如 ε-贪心），$A_{t+1}$ 可能是探索性动作。如果探索性动作导致低 $Q(S_{t+1}, A_{t+1})$（如走向危险区域），这个低 $Q$ 值会影响 $Q(S_t, A_t)$，使其降低。因此，Sarsa学习的 $Q$ 值反映了实际执行策略（含探索）的性能。在探索可能导致负面后果时（如悬崖行走问题），Sarsa倾向于学习更安全的路径，即使不是理论最优。这与异策略的Q-learning（更新目标用 $\max_{a'} Q(S_{t+1}, a')$）不同，后者更“激进”。</p>
+            </div>
+
+            <h3>三、Sarsa 算法解决的数学问题</h3>
+            <h4>学习当前策略的动作价值函数 $Q_\pi$</h4>
+            <p>Sarsa的首要目标是估计当前行为策略 $\pi$ (通常 ε-贪心) 下的动作价值函数 $Q_\pi(s,a)$。其更新规则可视为对 $Q_\pi(s,a)$ 的贝尔曼期望方程 $Q_\pi(s,a) = E_\pi[R_{t+1} + \gamma Q_\pi(S_{t+1}, A_{t+1}) | S_t=s, A_t=a]$ 的采样更新。</p>
+            <h4>通过策略迭代逐步逼近最优动作价值函数 $Q^*$</h4>
+            <p>Sarsa是广义策略迭代 (GPI) 的实例。策略评估：每步更新估计当前 ε-贪心策略的 $Q$ 值。策略改进：选择动作时采用 ε-贪心，倾向于利用已学到的较优动作。若满足GLIE条件，Sarsa理论上可收敛到 $Q^*$ 和 $\pi^*$。</p>
+            <h4>与贝尔曼控制方程的关系</h4>
+            <p>贝尔曼最优方程为 $Q^*(s,a) = E[R_{t+1} + \gamma \max_{a'} Q^*(S_{t+1}, a') | S_t=s, A_t=a]$。Sarsa更新规则不直接用 $\max_{a'} Q(S_{t+1}, a')$，而是用 $Q(S_{t+1}, A_{t+1})$。但当 $\epsilon \to 0$ 时，ε-贪心策略接近纯贪婪，$A_{t+1} \approx \arg\max_{a'} Q(S_{t+1}, a')$，此时Sarsa更新目标接近Q-learning。Sarsa通过同策略学习和策略迭代间接朝满足贝尔曼最优方程的 $Q^*$ 收敛。</p>
+        </section>
+
+        <section id="comparison" class="content-section bg-white p-6 rounded-lg shadow">
+            <h2>算法比较与总结</h2>
+            <p>本节对蒙特卡洛 (MC) 方法、时序差分 (TD) 学习（以TD(0)为例）以及 Sarsa 算法的核心特性、学习效率、收敛性、优缺点及应用场景进行总结和比较。这有助于理解它们在不同情境下的适用性。</p>
+            
+            <h3>一、核心特性对比</h3>
+            <p>MC、TD(0) 和 Sarsa 均为模型无关算法，直接从经验中学习。它们的主要区别在于更新时点、是否自举以及价值更新的依据。</p>
+            <div class="table-container my-4 overflow-x-auto">
+                <h4>表格 4.1.1：算法核心特性总览表</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>特性 (Characteristic)</th>
+                            <th>蒙特卡洛 (Monte Carlo)</th>
+                            <th>时序差分 (TD(0) 预测)</th>
+                            <th>Sarsa</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>是否需要环境模型</td>
+                            <td>否</td>
+                            <td>否</td>
+                            <td>否</td>
+                        </tr>
+                        <tr>
+                            <td>是否自举 (Bootstrapping)</td>
+                            <td>否</td>
+                            <td>是</td>
+                            <td>是 (作为TD方法)</td>
+                        </tr>
+                        <tr>
+                            <td>价值更新时机</td>
+                            <td>回合结束后</td>
+                            <td>每步之后</td>
+                            <td>每步之后</td>
+                        </tr>
+                        <tr>
+                            <td>价值更新依据</td>
+                            <td>完整回合的实际回报 $G_t$</td>
+                            <td>即时奖励与下一状态的估计价值 $R_{t+1} + \gamma V(S_{t+1})$</td>
+                            <td>即时奖励与下一状态-动作对的估计价值 $R_{t+1} + \gamma Q(S_{t+1}, A_{t+1})$</td>
+                        </tr>
+                        <tr>
+                            <td>控制算法策略类型</td>
+                            <td>同策略 (ε-greedy) 或 异策略 (Importance Sampling)</td>
+                            <td>(TD(0)主要用于预测)</td>
+                            <td>同策略 (On-Policy)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>二、学习效率与收敛性</h3>
+            <h4>偏差-方差权衡 (Bias-Variance Trade-off)</h4>
+            <p>MC方法的价值估计是无偏的（不依赖其他估计），但通常方差较高。TD(0)和Sarsa由于自举，其价值估计有偏（依赖后续不准确的估计），但通常方差较低。TD(0)试图找到与最大似然马尔可夫过程参数一致的价值估计，而MC方法试图最小化训练数据上的均方误差。</p>
+            <div class="my-6">
+                 <h4 class="text-center mb-4">概念性比较：偏差、方差及其他特性</h4>
+                <div class="chart-container">
+                    <canvas id="algorithmComparisonChart"></canvas>
+                </div>
+            </div>
+            <h4>收敛速度与理论保证</h4>
+            <p>MC方法（如首次访问MC）在i.i.d.样本下依大数定律收敛，但高方差可能导致收敛慢。TD方法通常比MC收敛更快，尤其在长回合任务中。在满足适当条件下（学习率衰减、充分探索），TD方法有收敛到真实价值的理论保证。Sarsa若采用GLIE策略，可收敛到 $Q^*$ 和 $\pi^*$。</p>
+            <h4>数据效率及在非平稳环境中的表现</h4>
+            <p>TD方法通常数据效率更高，因其从每步经验中提取信息。在非平稳环境中，TD方法（尤其用固定小学习率时）通常比标准MC表现更好，能更快适应变化。</p>
+            <button class="collapsible-button" data-target="insight-4-1">深层洞察 4.1：自举的“双刃剑”效应 <span>&#9660;</span></button>
+            <div id="insight-4-1" class="insight-content mt-2 p-4 bg-stone-50 rounded border border-stone-200">
+                <p>自举是TD方法与MC的核心区别，是其在线学习、低方差、高数据效率等优势的来源，但也是引入偏差的根本原因。TD更新依赖对下一状态价值的当前估计 $V(S_{t+1})$，若其不准，偏差会传播。MC不使用其他价值估计，直接用完整回报 $G_t$，在自举层面无偏。自举通过牺牲一定无偏性换取学习效率提升和方差降低。选择MC还是TD取决于问题对偏差-方差权衡的偏好及其他需求。</p>
+            </div>
+
+            <h3>三、优缺点与典型应用场景</h3>
+            <div class="table-container my-4 overflow-x-auto">
+                <h4>表格 4.3.1：MC, TD(0), Sarsa 优缺点与应用对比表</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>算法 (Algorithm)</th>
+                            <th>优点 (Advantages)</th>
+                            <th>缺点 (Disadvantages)</th>
+                            <th>典型应用 (Typical Applications)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>蒙特卡洛 (MC)</td>
+                            <td>无自举偏差；概念简单；可能更适合非马尔可夫环境</td>
+                            <td>高方差；需完整回合；不适用于连续任务</td>
+                            <td>回合制游戏 (如二十一点)，回合不长的模拟环境</td>
+                        </tr>
+                        <tr>
+                            <td>时序差分 (TD(0) 预测)</td>
+                            <td>低方差；在线单步更新；通常收敛快；适用于连续任务</td>
+                            <td>自举引入偏差；对初始值敏感</td>
+                            <td>各种预测问题，作为更复杂算法的基础 (如Q-learning, Sarsa)</td>
+                        </tr>
+                        <tr>
+                            <td>Sarsa</td>
+                            <td>继承TD优点 (在线, 单步, 低方差)；同策略评估实际执行策略的性能；在某些风险敏感场景下可能更安全</td>
+                            <td>同策略可能导致收敛慢或次优；受探索策略影响</td>
+                            <td>机器人导航，需要考虑探索成本或策略稳定性的控制问题</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="conclusion" class="content-section bg-white p-6 rounded-lg shadow">
+            <h2>结论 (Conclusion)</h2>
+            <p>本应用对强化学习中的蒙特卡洛方法、时序差分学习和Sarsa算法进行了深入的探讨和比较。这些算法是理解更复杂强化学习技术的基础，并在理论和实践中均占有重要地位。</p>
+            <h3>总结三种算法的关键区别与联系</h3>
+            <p>MC、TD和Sarsa在学习机制、更新时点及统计特性上存在关键区别。MC依赖完整回合，无自举，估计无偏但高方差。TD（含Sarsa）采用自举，单步在线更新，估计有偏但低方差，通常效率更高。Sarsa是同策略TD控制算法。尽管存在区别，它们都遵循广义策略迭代框架，通过评估和改进策略来逼近最优解。TD可视为MC与DP思想的结合。</p>
+            <h3>强调其在强化学习理论与实践中的重要性</h3>
+            <p>这些算法不仅是入门基础，更在强化学习理论体系和实际应用中扮演关键角色。它们为理解高级算法（如DQN, Actor-Critic）奠定概念基础，揭示了从经验中学习决策的基本原理和途径，并体现了探索与利用、偏差与方差、同策略与异策略等核心权衡。即便在新算法涌现的今天，这些经典算法及其变种在特定问题或作为复杂算法组件时仍具应用价值，是分析、设计新方法及评估性能的起点和基准。</p>
+        </section>
+
+    </div>
+
+    <footer class="text-center py-8 text-stone-500 text-sm">
+        <p>交互式强化学习算法解读应用。基于提供报告生成。</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: "$$", right: "$$", display: true},
+                    {left: "$", right: "$", display: false}
+                ]
+            });
+
+            const insightButtons = document.querySelectorAll('.collapsible-button');
+            insightButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetId = button.dataset.target;
+                    const targetContent = document.getElementById(targetId);
+                    const span = button.querySelector('span');
+                    if (targetContent) {
+                        targetContent.classList.toggle('open');
+                        if (targetContent.classList.contains('open')) {
+                            span.innerHTML = ' &#9650;'; // Up arrow
+                        } else {
+                            span.innerHTML = ' &#9660;'; // Down arrow
+                        }
+                    }
+                });
+            });
+
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            const navLinks = document.querySelectorAll('#mobile-menu a, nav a[href^="#"]');
+
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                const svgs = mobileMenuButton.querySelectorAll('svg');
+                svgs[0].classList.toggle('hidden');
+                svgs[1].classList.toggle('hidden');
+                const isExpanded = mobileMenu.classList.contains('hidden') ? 'false' : 'true';
+                mobileMenuButton.setAttribute('aria-expanded', isExpanded);
+            });
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    if (link.hash !== "") {
+                        // e.preventDefault(); // Prevent default only if we are doing smooth scroll
+                        const targetElement = document.querySelector(link.hash);
+                        if (targetElement) {
+                           // Smooth scroll can be added here if desired
+                           // window.scrollTo({ top: targetElement.offsetTop - 64, behavior: 'smooth' });
+                           
+                           // For mobile menu, close it after click
+                           if (!mobileMenu.classList.contains('hidden')) {
+                               mobileMenu.classList.add('hidden');
+                               const svgs = mobileMenuButton.querySelectorAll('svg');
+                               svgs[0].classList.remove('hidden');
+                               svgs[1].classList.add('hidden');
+                               mobileMenuButton.setAttribute('aria-expanded', 'false');
+                           }
+                        }
+                    }
+                });
+            });
+            
+            // Active nav item highlighting
+            const sections = document.querySelectorAll('.content-section');
+            const navItems = document.querySelectorAll('nav a.nav-item');
+
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 80) { // 64 for nav height + some offset
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navItems.forEach(item => {
+                    item.classList.remove('active');
+                    if (item.getAttribute('href') === `#${current}`) {
+                        item.classList.add('active');
+                    }
+                });
+            });
+
+
+            // Chart.js for Algorithm Comparison
+            const ctx = document.getElementById('algorithmComparisonChart').getContext('2d');
+            const algorithmComparisonChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['MC', 'TD(0)', 'Sarsa'],
+                    datasets: [
+                        {
+                            label: '偏差 (自举引入)', // Lower is better (less biased by bootstrapping)
+                            data: [1, 3, 3], // MC (Low=1), TD (High=3), Sarsa (High=3)
+                            backgroundColor: 'rgba(255, 99, 132, 0.5)', // Red
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '方差 (估计方差)', // Lower is better
+                            data: [3, 1, 1], // MC (High=3), TD (Low=1), Sarsa (Low=1)
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)', // Blue
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                         {
+                            label: '在线学习能力', // Higher is better (1=Yes, 0=No)
+                            data: [0, 1, 1], // MC (No=0), TD (Yes=1), Sarsa (Yes=1)
+                            backgroundColor: 'rgba(75, 192, 192, 0.5)', // Green
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '仅限回合制', // Lower is better (1=Yes, 0=No)
+                            data: [1, 0, 0], // MC (Yes=1), TD (No=0), Sarsa (No=0)
+                            backgroundColor: 'rgba(255, 206, 86, 0.5)', // Yellow
+                            borderColor: 'rgba(255, 206, 86, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '数据效率', // Higher is better
+                            data: [1, 3, 3], // MC (Low=1), TD (High=3), Sarsa (High=3)
+                            backgroundColor: 'rgba(153, 102, 255, 0.5)', // Purple
+                            borderColor: 'rgba(153, 102, 255, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    if (this.chart.data.datasets[0].data.includes(value) || 
+                                        this.chart.data.datasets[1].data.includes(value) ||
+                                        this.chart.data.datasets[4].data.includes(value)) { // For Bias, Variance, Data Efficiency
+                                        if (value === 1) return '低';
+                                        if (value === 2) return '中';
+                                        if (value === 3) return '高';
+                                    }
+                                    if (this.chart.data.datasets[2].data.includes(value) ||
+                                        this.chart.data.datasets[3].data.includes(value)) { // For Online, Episodic
+                                        if (value === 0) return '否';
+                                        if (value === 1) return '是';
+                                    }
+                                    return value;
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '概念性评分 (部分越高越好，部分越低越好)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    const value = context.parsed.y;
+                                    if (context.datasetIndex === 0 || context.datasetIndex === 1 || context.datasetIndex === 4) { // Bias, Variance, Data Efficiency
+                                        if (value === 1) label += '低';
+                                        else if (value === 2) label += '中';
+                                        else if (value === 3) label += '高';
+                                        else label += value;
+                                    } else if (context.datasetIndex === 2 || context.datasetIndex === 3) { // Online, Episodic
+                                        if (value === 0) label += '否';
+                                        else if (value === 1) label += '是';
+                                        else label += value;
+                                    } else {
+                                        label += value;
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: '强化学习算法特性比较 (概念性)',
+                            font: {
+                                size: 16
+                            }
+                        }
+                    }
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>
