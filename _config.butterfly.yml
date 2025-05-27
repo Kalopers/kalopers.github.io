@@ -22,7 +22,7 @@ menu:
     分类: /categories/ || fa fa-archive
     标签: /tags/ || fa fa-tags
     归档: /archives/ || fa fa-folder-open
-    learn: test-directory || fas fa-book
+    Some grotesque files: test-directory || fas fa-book
   友链: /links/ || fa fa-link
   虫洞: https://foreverblog.cn/go.html || fa fa-circle
   留言板: /comment/ || fa fa-paper-plane
@@ -453,7 +453,7 @@ busuanzi:
 math:
   # Choose: mathjax, katex
   # Leave it empty if you don't need math
-  use:
+  use: mathjax
   per_page: true
   hide_scrollbar: false
 

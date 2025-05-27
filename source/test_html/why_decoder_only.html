@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM纯解码器架构与处理流程解析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- Application Structure Plan: The SPA will use a fixed sidebar for navigation and a main content area. The structure is designed to guide the user logically through the report's information, starting from an overview, then diving into the evolution of Transformer architectures, the reasons for decoder-only dominance, and finally a detailed, interactive step-by-step explanation of the LLM processing flow. This non-linear, interactive approach is chosen over a simple linear document to enhance engagement and understanding. Key interactions include:
+        * Clickable navigation to switch between main topics.
+        * Expandable sections for detailed explanations of advantages.
+        * An interactive diagram for the LLM processing flow, where clicking on a step reveals its details, making complex information digestible.
+        * Conceptual visualizations (using Chart.js and HTML/CSS) for comparing architectures, illustrating training efficiency, and demonstrating sampling strategies.
+    This structure prioritizes user-driven exploration and breaks down complex topics into manageable, interactive chunks, which is more user-friendly than a static report. -->
+    <!-- Visualization & Content Choices: 
+        * Report Info: Transformer Architectures (Encoder-Decoder, Encoder-only, Decoder-only) -> Goal: Compare, Inform -> Viz/Presentation: HTML/CSS block diagrams for each. Clickable components. -> Interaction: Highlight component + show text on click. -> Justification: Visual comparison is easier to grasp. -> Library: HTML/CSS.
+        * Report Info: Why Decoder-only - Training Efficiency (CLM 100% vs MLM 15%) -> Goal: Compare, Inform -> Viz/Presentation: Chart.js Bar Chart. -> Interaction: Static chart with clear labels. -> Justification: Quantifiable comparison is impactful. -> Library: Chart.js.
+        * Report Info: LLM Processing Flow (6 steps) -> Goal: Explain complex multi-step process. -> Viz/Presentation: Central interactive HTML/CSS diagram of steps. Clicking a step shows details in a panel. -> Interaction: Click to reveal step details. -> Justification: Breaks down complexity, allows focused learning. -> Library: HTML/CSS/JS.
+        * Report Info: Tokenization Algorithms (BPE, WordPiece etc.) -> Goal: Illustrate concept. -> Viz/Presentation: Simulated text tokenization display (HTML/CSS). -> Interaction: Static display for different algorithms on a sample sentence. -> Justification: Concrete example aids understanding. -> Library: HTML/CSS.
+        * Report Info: Sampling Strategies (Greedy, Top-k, Top-p, Temperature) -> Goal: Compare, Demonstrate. -> Viz/Presentation: Chart.js Bar chart of a probability distribution. Buttons to apply different strategies. -> Interaction: Clicking buttons dynamically highlights selected tokens on the chart based on the chosen strategy. -> Justification: Interactive demo makes abstract concepts tangible. -> Library: Chart.js, JS.
+    -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mathjax-formula { font-size: 0.9em; }
+        .sidebar-link { display: block; padding: 0.75rem 1rem; margin-bottom: 0.5rem; border-radius: 0.375rem; transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out; }
+        .sidebar-link.active { background-color: #0284c7; color: white; }
+        .sidebar-link:not(.active):hover { background-color: #e0f2fe; color: #0c4a6e; }
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .diagram-box { border: 1px solid #cbd5e1; padding: 1rem; margin-bottom: 1rem; border-radius: 0.375rem; background-color: #f8fafc; }
+        .diagram-title { font-weight: 600; color: #1e40af; margin-bottom: 0.5rem; }
+        .clickable-detail:hover { background-color: #e0f2fe; cursor: pointer; }
+        .chart-container { position: relative; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; height: 300px; max-height: 400px; }
+        @media (min-width: 768px) { .chart-container { height: 350px; } }
+        .tab-button { padding: 0.5rem 1rem; border-radius: 0.375rem; margin-right: 0.5rem; background-color: #e2e8f0; color: #334155; cursor: pointer; }
+        .tab-button.active { background-color: #0ea5e9; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .step-flow-item { padding: 1rem; border: 2px solid transparent; border-radius: 0.5rem; margin-bottom: 0.75rem; cursor: pointer; transition: all 0.3s ease; background-color: #f1f5f9; }
+        .step-flow-item:hover { border-color: #38bdf8; background-color: #e0f2fe; }
+        .step-flow-item.active { border-color: #0ea5e9; background-color: #bae6fd; transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); }
+        .tooltip { position: relative; display: inline-block; }
+        .tooltip .tooltiptext { visibility: hidden; width: 200px; background-color: #555; color: #fff; text-align: center; border-radius: 6px; padding: 5px 0; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -100px; opacity: 0; transition: opacity 0.3s; }
+        .tooltip:hover .tooltiptext { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-700">
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <aside class="w-full md:w-64 bg-white shadow-md p-4 space-y-2 md:sticky md:top-0 md:h-screen overflow-y-auto">
+            <h1 class="text-2xl font-bold text-sky-700 mb-6 border-b pb-3 border-slate-300">LLM架构解析</h1>
+            <nav>
+                <a href="#introduction" class="sidebar-link active" onclick="showSection('introduction', this)">🚀 引言</a>
+                <a href="#evolution" class="sidebar-link" onclick="showSection('evolution', this)">📜 Transformer架构演进</a>
+                <a href="#why-decoder" class="sidebar-link" onclick="showSection('why-decoder', this)">💡 为何偏爱纯解码器?</a>
+                <a href="#processing-flow" class="sidebar-link" onclick="showSection('processing-flow', this)">⚙️ LLM完整处理流程</a>
+                <a href="#conclusion" class="sidebar-link" onclick="showSection('conclusion', this)">🔭 总结与展望</a>
+            </nav>
+        </aside>
+
+        <main class="flex-1 p-6 md:p-10 overflow-y-auto">
+            <section id="introduction" class="content-section active">
+                <h2 class="text-3xl font-semibold text-sky-700 mb-6">🚀 探究现代大语言模型为何偏爱纯解码器架构及其完整处理流程</h2>
+                <p class="mb-4 text-lg leading-relaxed">近年来，基于Transformer架构的大语言模型（LLMs）在自然语言处理领域取得了革命性进展。本应用旨在深入剖析现代LLM偏爱纯解码器架构的关键因素，并详细阐述一个典型的纯解码器LLM从处理输入、进行内部计算、并最终生成文本输出的完整步骤。通过交互式的探索，希望能帮助您更好地理解LLM的工作原理。</p>
+                <div class="bg-sky-100 border-l-4 border-sky-500 text-sky-700 p-4 rounded-md" role="alert">
+                    <p class="font-bold">欢迎!</p>
+                    <p>请使用左侧导航栏探索不同主题。部分章节包含交互元素，帮助您更直观地理解复杂概念。</p>
+                </div>
+            </section>
+
+            <section id="evolution" class="content-section">
+                <h2 class="text-3xl font-semibold text-sky-700 mb-6">📜 Transformer架构的演进</h2>
+                <p class="mb-6 text-lg leading-relaxed">Transformer模型自2017年提出以来，经历了多种形态的演变。了解这些架构有助于理解为何纯解码器模型成为当前主流。主要可以归纳为以下三种类型：</p>
+                
+                <div class="grid md:grid-cols-3 gap-6 mb-6">
+                    <div class="diagram-box">
+                        <h3 class="diagram-title">1. 原始Transformer (编码器-解码器)</h3>
+                        <p class="text-sm mb-2">用于序列到序列任务，如机器翻译。包含独立优化的编码器和解码器。</p>
+                        <div class="border border-dashed border-slate-400 p-3 rounded">
+                            <div class="bg-blue-200 p-2 rounded mb-1 text-center text-sm font-medium text-blue-800">输入序列</div>
+                            <div class="text-center my-1">↓</div>
+                            <div class="bg-green-200 p-2 rounded mb-1 text-center text-sm font-medium text-green-800 clickable-detail" onclick="showDetail('encoder-detail')">编码器 (Encoder)</div>
+                            <div class="text-center my-1">↓ (上下文向量)</div>
+                            <div class="bg-purple-200 p-2 rounded text-center text-sm font-medium text-purple-800 clickable-detail" onclick="showDetail('decoder-detail-encdec')">解码器 (Decoder)</div>
+                            <div class="text-center my-1">↓</div>
+                            <div class="bg-yellow-200 p-2 rounded text-center text-sm font-medium text-yellow-800">输出序列</div>
+                        </div>
+                        <p id="encoder-detail" class="text-xs mt-2 p-2 bg-slate-100 rounded hidden"><strong>编码器:</strong> 处理输入序列，生成上下文表示。包含自注意力和前馈网络。</p>
+                        <p id="decoder-detail-encdec" class="text-xs mt-2 p-2 bg-slate-100 rounded hidden"><strong>解码器 (Enc-Dec):</strong> 结合编码器输出和已生成序列，预测下一个词元。包含自注意力、交叉注意力和前馈网络。</p>
+                        <p class="text-xs mt-2"><strong>代表模型:</strong> T5, BART</p>
+                    </div>
+
+                    <div class="diagram-box">
+                        <h3 class="diagram-title">2. 仅编码器架构</h3>
+                        <p class="text-sm mb-2">专注于理解文本，适用于NLU任务，如文本分类、命名实体识别。</p>
+                        <div class="border border-dashed border-slate-400 p-3 rounded">
+                            <div class="bg-blue-200 p-2 rounded mb-1 text-center text-sm font-medium text-blue-800">输入序列</div>
+                            <div class="text-center my-1">↓</div>
+                            <div class="bg-green-200 p-2 rounded mb-1 text-center text-sm font-medium text-green-800 clickable-detail" onclick="showDetail('encoder-only-detail')">编码器堆栈 (Encoder Stack)</div>
+                            <div class="text-center my-1">↓</div>
+                            <div class="bg-orange-200 p-2 rounded text-center text-sm font-medium text-orange-800">上下文表示 (用于NLU)</div>
+                        </div>
+                        <p id="encoder-only-detail" class="text-xs mt-2 p-2 bg-slate-100 rounded hidden"><strong>编码器堆栈:</strong> 通过多层自注意力机制实现双向语境理解。</p>
+                        <p class="text-xs mt-2"><strong>代表模型:</strong> BERT, RoBERTa</p>
+                    </div>
+
+                    <div class="diagram-box">
+                        <h3 class="diagram-title">3. 仅解码器架构</h3>
+                        <p class="text-sm mb-2">核心是自回归生成文本，适用于对话、文本续写、代码生成等任务。</p>
+                         <div class="border border-dashed border-slate-400 p-3 rounded">
+                            <div class="bg-blue-200 p-2 rounded mb-1 text-center text-sm font-medium text-blue-800">输入提示 (Prompt)</div>
+                            <div class="text-center my-1">↓</div>
+                            <div class="bg-purple-200 p-2 rounded mb-1 text-center text-sm font-medium text-purple-800 clickable-detail" onclick="showDetail('decoder-only-detail-arch')">解码器堆栈 (Decoder Stack)</div>
+                            <div class="text-center my-1">↓ (逐词元生成)</div>
+                            <div class="bg-yellow-200 p-2 rounded text-center text-sm font-medium text-yellow-800">生成文本</div>
+                        </div>
+                        <p id="decoder-only-detail-arch" class="text-xs mt-2 p-2 bg-slate-100 rounded hidden"><strong>解码器堆栈:</strong> 采用掩码自注意力，确保预测时只关注已生成的词元。</p>
+                        <p class="text-xs mt-2"><strong>代表模型:</strong> GPT系列, LLaMA, PaLM</p>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-600">点击图示中的组件（如“编码器”）可以查看简要说明。</p>
+            </section>
+
+            <section id="why-decoder" class="content-section">
+                <h2 class="text-3xl font-semibold text-sky-700 mb-6">💡 为什么现代LLM多采用纯解码器架构？</h2>
+                <p class="mb-6 text-lg leading-relaxed">纯解码器架构凭借其多方面优势，成为现代大规模语言模型的主流选择。点击下方卡片了解详情：</p>
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                        <h3 class="text-xl font-semibold text-sky-600 mb-3">天然适配生成任务</h3>
+                        <p class="text-sm mb-3">自回归机制与人类语言生成过程相似，高效自然。</p>
+                        <button onclick="toggleDetail(this, 'detail-gen-fit')" class="text-sm text-sky-500 hover:text-sky-700 font-medium">查看更多 &rarr;</button>
+                        <div id="detail-gen-fit" class="text-xs mt-3 border-t pt-3 hidden">纯解码器通过固有的掩码自注意力机制，完美实现了从左到右的、条件性的序列生成过程。</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                        <h3 class="text-xl font-semibold text-sky-600 mb-3">训练效率与可扩展性</h3>
+                        <p class="text-sm mb-3">架构简洁，预训练目标（CLM）更有效利用数据。</p>
+                        <button onclick="toggleDetail(this, 'detail-train-scale')" class="text-sm text-sky-500 hover:text-sky-700 font-medium">查看更多 &rarr;</button>
+                        <div id="detail-train-scale" class="text-xs mt-3 border-t pt-3 hidden">
+                            <p>CLM预测几乎100%的输入词元，而MLM（如BERT）约15%。这使得在相同FLOPs下，纯解码器能学到更多生成信息。</p>
+                            <div class="chart-container mt-4 mx-auto" style="height: 200px; max-height: 200px;">
+                                <canvas id="trainingEfficiencyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                        <h3 class="text-xl font-semibold text-sky-600 mb-3">强大的零/少样本泛化</h3>
+                        <p class="text-sm mb-3">大规模预训练后，无需微调即可执行新任务 (In-Context Learning)。</p>
+                        <button onclick="toggleDetail(this, 'detail-few-shot')" class="text-sm text-sky-500 hover:text-sky-700 font-medium">查看更多 &rarr;</button>
+                        <div id="detail-few-shot" class="text-xs mt-3 border-t pt-3 hidden">模型在预测下一个词元中学会理解上下文、捕捉模式，易于迁移知识。</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                        <h3 class="text-xl font-semibold text-sky-600 mb-3">架构简洁与统一性</h3>
+                        <p class="text-sm mb-3">单一解码器堆栈易于实现、维护和扩展。</p>
+                        <button onclick="toggleDetail(this, 'detail-simplicity')" class="text-sm text-sky-500 hover:text-sky-700 font-medium">查看更多 &rarr;</button>
+                        <div id="detail-simplicity" class="text-xs mt-3 border-t pt-3 hidden">统一的“文本到文本”范式，一个模型可适应多种任务。</div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
+                        <h3 class="text-xl font-semibold text-sky-600 mb-3">强大的上下文理解</h3>
+                        <p class="text-sm mb-3">多层解码器能捕捉长距离依赖，实现深度语义理解。</p>
+                        <button onclick="toggleDetail(this, 'detail-context')" class="text-sm text-sky-500 hover:text-sky-700 font-medium">查看更多 &rarr;</button>
+                        <div id="detail-context" class="text-xs mt-3 border-t pt-3 hidden">逐层累积上下文信息，即使是单向注意力也能构建丰富的语义表示。</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="processing-flow" class="content-section">
+                <h2 class="text-3xl font-semibold text-sky-700 mb-6">⚙️ LLM从原始输入到输出的完整处理流程</h2>
+                <p class="mb-6 text-lg leading-relaxed">一个典型的纯解码器LLM处理流程包含多个关键步骤。点击下方流程图中的步骤以查看详细说明：</p>
+                
+                <div class="flex flex-col lg:flex-row gap-6">
+                    <div class="lg:w-1/3 space-y-3">
+                        <div id="flow-step-1" class="step-flow-item" onclick="showFlowDetail('step1-detail', 'flow-step-1')">
+                            <span class="font-semibold">步骤 1:</span> 文本预处理与分词
+                        </div>
+                        <div id="flow-step-2" class="step-flow-item" onclick="showFlowDetail('step2-detail', 'flow-step-2')">
+                            <span class="font-semibold">步骤 2:</span> 词嵌入与位置编码
+                        </div>
+                        <div id="flow-step-3" class="step-flow-item" onclick="showFlowDetail('step3-detail', 'flow-step-3')">
+                            <span class="font-semibold">步骤 3:</span> 解码器核心处理
+                        </div>
+                        <div id="flow-step-4" class="step-flow-item" onclick="showFlowDetail('step4-detail', 'flow-step-4')">
+                            <span class="font-semibold">步骤 4:</span> 生成概率分布
+                        </div>
+                        <div id="flow-step-5" class="step-flow-item" onclick="showFlowDetail('step5-detail', 'flow-step-5')">
+                            <span class="font-semibold">步骤 5:</span> 词元选择与采样
+                        </div>
+                        <div id="flow-step-6" class="step-flow-item" onclick="showFlowDetail('step6-detail', 'flow-step-6')">
+                            <span class="font-semibold">步骤 6:</span> 自回归生成与终止
+                        </div>
+                    </div>
+
+                    <div id="flow-detail-panel" class="lg:w-2/3 bg-white p-6 rounded-lg shadow-md">
+                        <h3 id="flow-detail-title" class="text-2xl font-semibold text-sky-600 mb-4">请选择一个步骤查看详情</h3>
+                        <div id="flow-detail-content" class="text-sm leading-relaxed space-y-3">
+                            <p>这里将显示选中步骤的详细信息。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step-details-container" class="hidden">
+                    <div id="step1-detail">
+                        <h4 class="text-xl font-medium mb-2">步骤 1: 文本预处理与分词</h4>
+                        <p>LLM无法直接处理原始字符串，需将其转换为词元（Tokens）序列。</p>
+                        <ul class="list-disc list-inside space-y-1 mt-2">
+                            <li><strong>文本预处理:</strong> 清理（如去HTML标签）、编码转换（UTF-8）、规范化（如小写）。</li>
+                            <li><strong>分词 (Tokenization):</strong> 将文本切分成词元。现代LLM多采用<strong>子词分词</strong> (Subword Tokenization)，平衡词汇表大小和序列长度，处理未登录词 (OOV)。
+                                <div class="mt-2 p-3 bg-slate-100 rounded">
+                                    <p class="font-semibold text-xs mb-1">子词分词示例 (概念性):</p>
+                                    <p class="text-xs">句子: "探究现代大语言模型"</p>
+                                    <p class="text-xs">BPE 可能分词: ["探究", "现代", "大", "语言", "模型"] 或 ["探", "究", "现代", "大语", "言模型"]</p>
+                                    <p class="text-xs">WordPiece 可能分词: ["探究", "现代", "大", "语言", "模型"] (词内子词可能带##前缀)</p>
+                                    <p class="text-xs">字符级分词: ["探", "究", "现", "代", "大", "语", "言", "模", "型"]</p>
+                                </div>
+                            </li>
+                            <li><strong>主流子词算法:</strong>
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>字节对编码 (Byte Pair Encoding, BPE): GPT系列使用。迭代合并高频字节对。字节级BPE可避免UNK。</li>
+                                    <li>WordPiece: BERT使用。类似BPE，但基于似然性合并。</li>
+                                    <li>SentencePiece: Google开发。语言无关，直接从原始句子训练，空格视为普通符号。支持BPE和Unigram。</li>
+                                    <li>Unigram Language Model: 从大词汇表开始，迭代移除降低似然性最小的词元。</li>
+                                </ul>
+                            </li>
+                            <li><strong>特殊词元:</strong> 如 ``, ``, ``, `[UNK]`, `<s>`, `</s>`。辅助理解结构、执行任务、控制生成。</li>
+                        </ul>
+                    </div>
+                    <div id="step2-detail">
+                        <h4 class="text-xl font-medium mb-2">步骤 2: 词嵌入与位置编码</h4>
+                        <p>将离散的词元ID转换为连续的向量表示，并注入位置信息。</p>
+                        <ul class="list-disc list-inside space-y-1 mt-2">
+                            <li><strong>词嵌入 (Token Embeddings):</strong> 每个词元ID映射到一个稠密的、低维向量 ($d_{model}$维)。通过查找表实现，训练中学习。使得语义相似的词元在嵌入空间中接近。初始是无上下文的。</li>
+                            <li><strong>位置编码 (Positional Encoding):</strong> Transformer本身不感知顺序，需明确注入位置信息。
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li><strong>绝对位置编码:</strong>
+                                        <ul class="list-square list-inside ml-4">
+                                            <li>正弦/余弦编码: 原始Transformer使用。基于固定公式，可推广到更长序列。
+                                                <div class="mathjax-formula">\(PE_{(pos, 2i)} = \sin(pos / 10000^{2i/d_{model}})\)</div>
+                                                <div class="mathjax-formula">\(PE_{(pos, 2i+1)} = \cos(pos / 10000^{2i/d_{model}})\)</div>
+                                            </li>
+                                            <li>学习的位置编码: 为每个绝对位置学习一个向量。</li>
+                                        </ul>
+                                    </li>
+                                    <li><strong>相对位置编码 (如 RoPE):</strong> 更关注词元间相对距离。
+                                        <div class="tooltip">旋转位置编码 (RoPE)
+                                            <span class="tooltiptext">LLaMA, PaLM等采用。通过对Q, K向量应用与位置相关的旋转操作注入信息，点积自然取决于相对位置。长度外推性好。</span>
+                                        </div>
+                                        对Q, K向量应用旋转矩阵：
+                                        <div class="mathjax-formula">\(\begin{pmatrix} \cos m\theta_i & -\sin m\theta_i \\ \sin m\theta_i & \cos m\theta_i \end{pmatrix} \begin{pmatrix} x_j \\ x_{j+1} \end{pmatrix}\)</div>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li>最终输入 = 词嵌入 + 位置编码 (通常相加)。</li>
+                        </ul>
+                    </div>
+                    <div id="step3-detail">
+                        <h4 class="text-xl font-medium mb-2">步骤 3: 解码器核心处理</h4>
+                        <p>输入向量序列经过N个相同的解码器层（Decoder Layer）堆叠处理，迭代细化表示。</p>
+                        <p class="mt-2 font-semibold">每个解码器层包含:</p>
+                        <ul class="list-disc list-inside space-y-1 mt-2">
+                            <li><strong>掩码多头自注意力 (Masked Multi-Head Self-Attention):</strong>
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>自注意力: 计算Query, Key, Value向量。通过Q, K点积计算注意力权重，对V加权求和。</li>
+                                    <li>掩码 (Causal Masking): 预测第i个词元时，不能访问未来信息 ($j > i$ 的注意力分数设为负无穷)。</li>
+                                    <li>多头: 并行执行h个注意力计算（不同表示子空间），拼接结果后线性变换。增强模型捕捉多样上下文特征的能力。</li>
+                                </ul>
+                            </li>
+                            <li><strong>前馈神经网络 (Feed-Forward Network, FFN):</strong>
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>通常2个线性层 + 1个非线性激活函数 (ReLU, GeLU)。</li>
+                                    <li>$d_{model} \rightarrow d_{ff} (\text{通常} 4 \times d_{model}) \rightarrow d_{model}$。</li>
+                                    <li>位置独立，引入非线性，增强表达能力。</li>
+                                </ul>
+                            </li>
+                            <li><strong>残差连接 (Residual Connections) 与 层归一化 (Layer Normalization):</strong>
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>残差连接: $x + \text{Sublayer}(x)$。缓解梯度消失，促进信息流动。</li>
+                                    <li>层归一化: 稳定训练，加速收敛。
+                                        <ul class="list-square list-inside ml-4">
+                                        <li>Post-LN: $\text{LayerNorm}(x + \text{Sublayer}(x))$ (原始Transformer，可能不稳定)</li>
+                                        <li>Pre-LN: $x + \text{Sublayer}(\text{LayerNorm}(x))$ (现代LLM常用，更易训练)</li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ul>
+                        <div class="mt-3 p-3 bg-slate-100 rounded text-xs">
+                            <p class="font-semibold mb-1">解码器层结构 (简化):</p>
+                            <p>Input → [LayerNorm → Masked Multi-Head Self-Attention → Add (Residual)] → [LayerNorm → FFN → Add (Residual)] → Output</p>
+                        </div>
+                    </div>
+                    <div id="step4-detail">
+                        <h4 class="text-xl font-medium mb-2">步骤 4: 生成下一个词元的概率分布</h4>
+                        <p>将解码器最终的隐藏状态转换为词汇表空间中每个词元作为下一个词元的概率。</p>
+                        <ul class="list-disc list-inside space-y-1 mt-2">
+                            <li><strong>获取最终隐藏状态:</strong> 取序列最后一个有效词元对应的最终隐藏状态向量 (维度 $d_{model}$)。</li>
+                            <li><strong>线性变换 (语言模型头):</strong> 将该隐藏状态向量通过一个权重为 $d_{model} \times \text{vocab\_size}$ 的线性层，输出logits向量 (长度 $\text{vocab\_size}$)。
+                                <div class="tooltip text-xs">权重绑定 (Weight Tying)
+                                    <span class="tooltiptext">输入词嵌入矩阵与输出线性层权重矩阵共享 (转置后)，减少参数，可能提升性能。</span>
+                                </div>
+                            </li>
+                            <li><strong>Softmax函数:</strong> 将logits转换为概率分布。
+                                <div class="mathjax-formula">\(P(token_i | \text{context}) = \text{softmax}(z_i) = \frac{e^{z_i}}{\sum_{j=1}^{\text{vocab\_size}} e^{z_j}}\)</div>
+                                输出向量元素值在0-1之间，和为1。
+                            </li>
+                        </ul>
+                    </div>
+                    <div id="step5-detail">
+                        <h4 class="text-xl font-medium mb-2">步骤 5: 词元选择与采样策略</h4>
+                        <p>从概率分布中选择一个具体词元作为输出，影响生成文本特性。</p>
+                        <ul class="list-disc list-inside space-y-1 mt-2">
+                            <li><strong>贪心搜索 (Greedy Search):</strong> 选择概率最高的词元。简单快速，但易局部最优，文本可能单调。</li>
+                            <li><strong>束搜索 (Beam Search):</strong> 每步保留k个最高概率序列。质量通常优于贪心，但计算成本高，仍可能缺乏多样性。</li>
+                            <li><strong>随机采样方法:</strong> 引入随机性，增强多样性和创造力。
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>纯随机采样: 直接按概率分布采样，易产生不连贯文本。</li>
+                                    <li>温度参数 (Temperature Scaling): $z'_i = z_i / T$。
+                                        <ul class="list-square list-inside ml-4">
+                                        <li>$T > 1$: 分布更平缓，更多样，可能牺牲连贯性。</li>
+                                        <li>$T < 1$: 分布更尖锐，更保守，接近贪心。</li>
+                                        </ul>
+                                    </li>
+                                    <li>Top-k 采样: 仅从概率最高的k个词元中采样。</li>
+                                    <li>Top-p (核心) 采样: 从累积概率超过阈值p的最小词元集中采样，候选集大小动态调整。</li>
+                                    <li>Min-p 采样: Top-p的改进，平衡质量和多样性。</li>
+                                </ul>
+                            </li>
+                        </ul>
+                        <div class="mt-4">
+                            <p class="font-semibold mb-2">采样策略演示 (概念性):</p>
+                            <div class="chart-container mx-auto" style="height:250px; max-height:250px;">
+                                <canvas id="samplingStrategyChart"></canvas>
+                            </div>
+                            <div class="flex flex-wrap justify-center gap-2 mt-3">
+                                <button class="tab-button text-xs" onclick="updateSamplingChart('greedy')">贪心</button>
+                                <button class="tab-button text-xs" onclick="updateSamplingChart('temp_high')">高温 (T=1.5)</button>
+                                <button class="tab-button text-xs" onclick="updateSamplingChart('temp_low')">低温 (T=0.5)</button>
+                                <button class="tab-button text-xs" onclick="updateSamplingChart('top_k')">Top-k (k=3)</button>
+                                <button class="tab-button text-xs" onclick="updateSamplingChart('top_p')">Top-p (p=0.9)</button>
+                            </div>
+                            <p id="sampling-explanation" class="text-xs text-center mt-2 text-slate-600"></p>
+                        </div>
+                    </div>
+                    <div id="step6-detail">
+                        <h4 class="text-xl font-medium mb-2">步骤 6: 自回归生成与终止条件</h4>
+                        <p>选定词元后，进入循环生成过程，直到满足终止条件。</p>
+                        <ul class="list-disc list-inside space-y-1 mt-2">
+                            <li><strong>自回归生成:</strong>
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>选出的词元ID添加到当前序列末尾。</li>
+                                    <li>新序列作为LLM下一时间步的输入，重复步骤3-5。</li>
+                                    <li>“生成-反馈-再生成”循环，当前输出依赖先前所有输出。</li>
+                                </ul>
+                            </li>
+                            <li><strong>终止条件:</strong>
+                                <ul class="list-circle list-inside ml-4 text-xs">
+                                    <li>生成结束符 (End-of-Sequence, EOS token): 如`</s>`。模型学习在内容自然结束时生成。最理想的停止方式。</li>
+                                    <li>达到最大长度限制 (Maximum Length): 防止过长或无限生成。安全网。</li>
+                                    <li>其他自定义停止序列: 如特定标记。</li>
+                                </ul>
+                            </li>
+                            <li class="mt-2"><strong>推理挑战:</strong> 自回归生成是串行的，可能耗时。KV缓存等技术用于优化。</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="conclusion" class="content-section">
+                <h2 class="text-3xl font-semibold text-sky-700 mb-6">🔭 总结与展望</h2>
+                <div class="space-y-4 text-lg leading-relaxed">
+                    <p>本应用探讨了现代LLM普遍采用纯解码器架构的原因，并阐述了其完整处理流程。纯解码器架构凭借其生成任务适配性、训练效率、泛化能力、简洁性和上下文理解能力成为主流。</p>
+                    <p>LLM的处理流程是一个精密的多阶段系统，包括文本预处理与分词、词嵌入与位置编码、解码器核心处理、概率分布生成、词元选择与采样，以及自回归生成与终止。每个环节都对最终性能和输出特性有深远影响。</p>
+                    <h3 class="text-2xl font-medium text-sky-600 mt-6 mb-3">未来发展趋势展望:</h3>
+                    <ul class="list-disc list-inside space-y-2 pl-4">
+                        <li>更高效的注意力机制 (如线性/稀疏注意力)</li>
+                        <li>更优的位置编码方案 (增强长度外推)</li>
+                        <li>多模态融合 (文本、图像、音频等)</li>
+                        <li>模型效率与部署 (压缩、量化、高效推理)</li>
+                        <li>可解释性、可控性与安全性</li>
+                        <li>超越当前范式的新架构探索</li>
+                    </ul>
+                    <p class="mt-4">对LLM内部工作流程的深入理解和对未来趋势的关注，将有助于我们更好地驾驭这一强大技术。</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+<script>
+    let currentActiveSection = 'introduction';
+    let currentActiveFlowStep = null;
+    let trainingEfficiencyChartInstance = null;
+    let samplingStrategyChartInstance = null;
+    const initialSamplingProbs = [0.4, 0.25, 0.15, 0.1, 0.06, 0.04];
+    const samplingLabels = ['词A', '词B', '词C', '词D', '词E', '词F'];
+
+    function showSection(sectionId, element) {
+        document.getElementById(currentActiveSection).classList.remove('active');
+        document.getElementById(sectionId).classList.add('active');
+        currentActiveSection = sectionId;
+
+        document.querySelectorAll('.sidebar-link').forEach(link => link.classList.remove('active'));
+        element.classList.add('active');
+        
+        // Special handling for charts if they are in the section
+        if (sectionId === 'why-decoder' && !trainingEfficiencyChartInstance) {
+            renderTrainingEfficiencyChart();
+        }
+        // Reset flow step selection when leaving processing-flow
+        if (sectionId !== 'processing-flow' && currentActiveFlowStep) {
+            document.getElementById(currentActiveFlowStep).classList.remove('active');
+            currentActiveFlowStep = null;
+            document.getElementById('flow-detail-title').textContent = '请选择一个步骤查看详情';
+            document.getElementById('flow-detail-content').innerHTML = '<p>这里将显示选中步骤的详细信息。</p>';
+        }
+    }
+
+    function showDetail(detailId) {
+        const detailElement = document.getElementById(detailId);
+        if (detailElement) {
+            detailElement.classList.toggle('hidden');
+        }
+    }
+    
+    function toggleDetail(button, detailId) {
+        const detailElement = document.getElementById(detailId);
+        const isHidden = detailElement.classList.toggle('hidden');
+        button.innerHTML = isHidden ? '查看更多 &rarr;' : '收起 &uarr;';
+    }
+
+    function showFlowDetail(detailContentId, stepElementId) {
+        const detailContentHtml = document.getElementById(detailContentId).innerHTML;
+        document.getElementById('flow-detail-title').textContent = document.getElementById(stepElementId).textContent.trim();
+        document.getElementById('flow-detail-content').innerHTML = detailContentHtml;
+        
+        if (currentActiveFlowStep) {
+            document.getElementById(currentActiveFlowStep).classList.remove('active');
+        }
+        document.getElementById(stepElementId).classList.add('active');
+        currentActiveFlowStep = stepElementId;
+
+        // Re-render MathJax for the new content
+        if (window.MathJax) {
+            MathJax.typesetPromise([document.getElementById('flow-detail-content')]).catch(function (err) {
+                console.error('MathJax typesetting error: ' + err.message);
+            });
+        }
+        
+        // Special handling for sampling chart
+        if (detailContentId === 'step5-detail' && !samplingStrategyChartInstance) {
+            renderSamplingStrategyChart(initialSamplingProbs, "初始概率分布");
+        } else if (detailContentId === 'step5-detail' && samplingStrategyChartInstance) {
+             // Ensure chart is visible and correctly sized if already rendered
+            updateSamplingChart('initial'); // Reset to initial state
+        }
+    }
+
+    function renderTrainingEfficiencyChart() {
+        const ctx = document.getElementById('trainingEfficiencyChart').getContext('2d');
+        if (trainingEfficiencyChartInstance) {
+            trainingEfficiencyChartInstance.destroy();
+        }
+        trainingEfficiencyChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['纯解码器 (CLM)', '仅编码器 (MLM)'],
+                datasets: [{
+                    label: '预训练时预测的词元比例 (%)',
+                    data: [100, 15],
+                    backgroundColor: ['#38bdf8', '#fbbf24'],
+                    borderColor: ['#0ea5e9', '#f59e0b'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, title: { display: true, text: '预测词元比例 (%)' } }
+                },
+                plugins: {
+                    title: { display: true, text: '预训练目标效率对比 (概念性)' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.raw + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderSamplingStrategyChart(probs, title) {
+        const ctx = document.getElementById('samplingStrategyChart').getContext('2d');
+         if (samplingStrategyChartInstance) {
+            samplingStrategyChartInstance.destroy();
+        }
+        samplingStrategyChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: samplingLabels,
+                datasets: [{
+                    label: '词元概率',
+                    data: probs,
+                    backgroundColor: probs.map(() => '#7dd3fc'), // Default color
+                    borderColor: probs.map(() => '#0ea5e9'),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, max: Math.max(...probs, 0.5) } }, // Adjust max for visibility
+                plugins: {
+                    title: { display: true, text: title },
+                    legend: { display: false }
+                },
+                animation: { duration: 500 }
+            }
+        });
+    }
+    
+    function updateSamplingChart(strategy) {
+        if (!samplingStrategyChartInstance) {
+             renderSamplingStrategyChart(initialSamplingProbs, "初始概率分布");
+        }
+        let explanation = "";
+        let newProbs = [...initialSamplingProbs]; // Make a copy
+        let backgroundColors = newProbs.map(() => '#7dd3fc'); // Reset colors
+        const sortedProbs = initialSamplingProbs.map((p, i) => ({prob: p, index: i, label: samplingLabels[i]}))
+            .sort((a, b) => b.prob - a.prob);
+
+        switch(strategy) {
+            case 'initial':
+                explanation = "初始概率分布。";
+                break;
+            case 'greedy':
+                explanation = "贪心搜索：选择概率最高的词元 (词A)。";
+                backgroundColors[sortedProbs[0].index] = '#0284c7'; // Highlight best
+                break;
+            case 'temp_high': // T=1.5
+                {
+                    const T = 1.5;
+                    const logits = initialSamplingProbs.map(p => Math.log(p)); // Approximate logits
+                    const scaledLogits = logits.map(l => l / T);
+                    const expScaledLogits = scaledLogits.map(l => Math.exp(l));
+                    const sumExp = expScaledLogits.reduce((a, b) => a + b, 0);
+                    newProbs = expScaledLogits.map(e => e / sumExp);
+                    explanation = "高温 (T=1.5)：概率分布更平缓，增加采样多样性。";
+                }
+                break;
+            case 'temp_low': // T=0.5
+                {
+                    const T = 0.5;
+                    const logits = initialSamplingProbs.map(p => Math.log(p));
+                    const scaledLogits = logits.map(l => l / T);
+                    const expScaledLogits = scaledLogits.map(l => Math.exp(l));
+                    const sumExp = expScaledLogits.reduce((a, b) => a + b, 0);
+                    newProbs = expScaledLogits.map(e => e / sumExp);
+                    explanation = "低温 (T=0.5)：概率分布更尖锐，采样更集中于高概率词元。";
+                }
+                break;
+            case 'top_k': // k=3
+                {
+                    const k = 3;
+                    explanation = `Top-k (k=3)：仅从概率最高的 ${k} 个词元 (词A, 词B, 词C) 中采样。`;
+                    const topKIndices = sortedProbs.slice(0, k).map(item => item.index);
+                    newProbs.forEach((_, i) => {
+                        if (topKIndices.includes(i)) {
+                            backgroundColors[i] = '#38bdf8'; // Highlight candidates
+                        } else {
+                            newProbs[i] = 0; // Zero out others
+                        }
+                    });
+                    // Re-normalize (conceptual, actual sampling would do this)
+                    const sumTopK = topKIndices.reduce((sum, idx) => sum + initialSamplingProbs[idx], 0);
+                     topKIndices.forEach(idx => newProbs[idx] = initialSamplingProbs[idx] / sumTopK * sumTopK ); // Keep original scale for viz
+                }
+                break;
+            case 'top_p': // p=0.9
+                {
+                    const p_thresh = 0.9;
+                    let cumulativeProb = 0;
+                    const nucleusIndices = [];
+                    for (const item of sortedProbs) {
+                        if (cumulativeProb < p_thresh) {
+                            cumulativeProb += item.prob;
+                            nucleusIndices.push(item.index);
+                        } else {
+                            break;
+                        }
+                    }
+                    explanation = `Top-p (p=0.9)：从累积概率达到 ${p_thresh} 的最小词元集 (核心集) 中采样。这里是 ${nucleusIndices.map(i => samplingLabels[i]).join(', ')}。`;
+                     newProbs.forEach((_, i) => {
+                        if (nucleusIndices.includes(i)) {
+                            backgroundColors[i] = '#38bdf8'; // Highlight candidates
+                        } else {
+                            newProbs[i] = 0; // Zero out others
+                        }
+                    });
+                }
+                break;
+        }
+        
+        samplingStrategyChartInstance.data.datasets[0].data = newProbs;
+        samplingStrategyChartInstance.data.datasets[0].backgroundColor = backgroundColors;
+        samplingStrategyChartInstance.options.plugins.title.text = `采样策略: ${strategy === 'initial' ? '初始分布' : strategy}`;
+        samplingStrategyChartInstance.update();
+        document.getElementById('sampling-explanation').textContent = explanation;
+    }
+
+    // Initial setup
+    document.addEventListener('DOMContentLoaded', () => {
+        showSection('introduction', document.querySelector('.sidebar-link'));
+        // Set up MathJax configuration
+        if (window.MathJax) {
+            window.MathJax = {
+                tex: {
+                    inlineMath: [['$', '$'], ['\\(', '\\)']],
+                    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+                },
+                svg: {
+                    fontCache: 'global'
+                }
+            };
+        }
+    });
+</script>
+</body>
+</html>
