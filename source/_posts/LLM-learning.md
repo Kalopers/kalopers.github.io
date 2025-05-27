@@ -6,6 +6,7 @@ tags:
 ---
 
 ## 学习随记
-{% post_link attention %}
+- {% post_link attention %}  
+- {% post_link prove %} 
 
 ## 论文阅读

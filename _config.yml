@@ -110,9 +110,11 @@ theme: butterfly
 deploy:
   type: ''
 
-lazyload:
-  enable: true
-  loadingImg: /img/loading.gif
+# 已删除 - 不好用
+# lazyload:
+#   enable: false
+#   loadingImg: /img/loading.gif
+#   isSPA: true # optional
 
 # githubcalendar
 # github近期代码贡献度
