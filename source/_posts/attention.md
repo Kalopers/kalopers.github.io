@@ -8,7 +8,7 @@ mathjax: true
 ---
 ~~没啥用的铺垫，可以直接跳到Q&A~~
 先来一张Transformer的结构图：
-![Transformer 架构](img/attention/transformer.svg)
+![Transformer 架构](/img/attention/transformer.svg)
 
 然后是多头注意力各个部分的tensor形状：
 <!-- ![多头注意力各个部分的tensor形状](img/attention/0c016e6fbd3c65402be3536d7eedbbea2c739f1c.png) -->
