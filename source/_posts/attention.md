@@ -7,12 +7,14 @@ tags:
 mathjax: true
 ---
 ~~没啥用的铺垫，可以直接跳到Q&A~~
+{% spoiler %}
 先来一张Transformer的结构图：
 ![Transformer 架构](/img/attention/transformer.svg)
 
 然后是多头注意力各个部分的tensor形状：
-![多头注意力各个部分的tensor形状](/img/attention/0c016e6fbd3c65402be3536d7eedbbea2c739f1c.png)
-<!-- <img src="/img/attention/0c016e6fbd3c65402be3536d7eedbbea2c739f1c.png" width="60%" alt="多头注意力各个部分的tensor形状"> -->
+<!-- ![多头注意力各个部分的tensor形状](/img/attention/0c016e6fbd3c65402be3536d7eedbbea2c739f1c.png) -->
+<img src="/img/attention/0c016e6fbd3c65402be3536d7eedbbea2c739f1c.png" width="60%" alt="多头注意力各个部分的tensor形状">
+{% endspoiler %}
 
 ## Q&A
 ### Q1: Transformer中Multi-head Attention中每个head为什么要进行降维？
@@ -139,4 +141,62 @@ $$
 $$
 因此可以大致认为内积之后、`softmax`之前的数值在$[-3\sqrt{d}, 3\sqrt{d}]$这个范围内，以上文为例，$d_k = 64$，则`softmax`时两个边界值分别是$e^{-24}$和$e^{24}$，因此经过`softmax`之后，Attention的分布非常接近一个`one hot`分布了，这带来严重的**梯度消失**问题，导致训练效果差。
 因此需要缩放因子$\sqrt{d_k}$来平衡点积的大小，使得`softmax`的输入值不会过大或过小，从而避免梯度消失问题。选择缩放因子$\sqrt{d_k}$刚好可以将点积后的结果归一化成均值为0，方差为1的向量。
+{% endspoiler %}
+
+### Q3：为什么要添加位置编码，介绍一下各类位置编码。
+{% spoiler Answer %}
+Transformer中Encoder部分会对输入的token进行自注意力操作，在不添加额外的位置编码时，自注意力操作是具有轮换对称性的，即任意给定两个token $[x_i, x_j]$，对应的表征向量为 $[e_i, e_j]$，对于注意力操作函数$f$，任意交换$x_i, x_j$的次序，期望下交换是具有[不变性](https://www.zhihu.com/question/307293465/answer/1028613658)，即：
+$$
+E_{e_i,e_j}[f([..., e_i, ..., e_j, ...]) - f([..., e_j, ..., e_i, ...])] = 0
+$$
+换句话说就是，你喂给模型“猫爱吃鱼”和“鱼爱吃猫”这两句话大概率会得到一样的输出，这显然与我们对大模型的预期不符（其应当同时具备句法知识和世界知识，这里的例子表明无法学习到世界知识~~？对吗~~），因此需要添加位置编码来打破这种对称性。
+
+可以根据位置编码的思想将位置编码分为两类：
+1. 绝对位置编码：为输入序列中的每个绝对位置生成一个特定的编码，并将其直接融入到该位置的词向量表征中。模型直接感知每个词在序列中的确切位置。
+    - **训练式**：直接将位置编码当作可训练参数，比如最大长度为512，编码维度为768，那么就初始化一个512×768的矩阵作为位置向量，让它随着训练过程更新。对于这种训练式的绝对位置编码，一般的认为它的缺点是没有外推性，即如果预训练最大长度为512的话，那么最多就只能处理长度为512的句子，再长就处理不了了。
+    - **三角式**：最知名的是Google的论文《Attention is all you need》中提出的Sinusoidal位置编码，使用正弦和余弦函数生成位置编码，具体公式为：
+    $$
+    \begin{align}
+        \left\{\begin{array}{l}
+            \boldsymbol{p}_{k, 2 i} & = \sin \left(k / 10000^{2 i / d}\right) \\
+            \boldsymbol{p}_{k, 2 i+1} & = \cos \left(k / 10000^{2 i / d}\right)
+        \end{array}\right.
+    \end{align}
+    $$
+    其中$p_{k,2 i}, p_{k, 2 i+1}$分别是位置k的编码向量的第$2i, 2i+1$个分量，$d$是向量维度。
+    > 至于这种编码方式能否满足前面我们提到的同时能表示绝对位置信息和相对位置信息的要求，苏神在他的[《Sinusoidal位置编码追根溯源》](https://spaces.ac.cn/archives/8231)中有证明。
+2. 相对位置编码：模型关注的是序列中元素之间的**相对位置关系**，通常通过在注意力机制中引入表示相对位置的可学习参数或动态计算的偏差来实现，使模型能够根据词与词之间的距离来调整它们之间的交互。
+    - **经典式**
+    - **XLNET式**
+    - **T5式**
+3. 融合编码~~集大成者~~
+    - **RoPE**
+    - **ReRoPE**
+
+{% endspoiler %}
+
+
+## 后记
+贴一个苏神的《Transformer升级之路》系列的笔记列表，苏神很多文章把数学和论文思想结合的很好，很推荐看：
+{% spoiler List %}
+1. [Sinusoidal位置编码追根溯源](https://spaces.ac.cn/archives/8231) -> 证明了Sinusoidal位置编码是一种能够表示绝对位置信息和相对位置信息的编码方式
+2. [博采众长的旋转式位置编码](https://spaces.ac.cn/archives/8265)
+3. [从Performer到线性Attention](https://spaces.ac.cn/archives/8338)
+4. [二维位置的旋转式位置编码](https://spaces.ac.cn/archives/8397)
+5. [作为无限维的线性Attention](https://spaces.ac.cn/archives/8601)
+6. [旋转位置编码的完备性分析](https://spaces.ac.cn/archives/9403)
+7. [长度外推性与局部注意力](https://spaces.ac.cn/archives/9431)
+8. [长度外推性与位置鲁棒性](https://spaces.ac.cn/archives/9444)
+9. [一种全局长度外推的新思路](https://spaces.ac.cn/archives/9603)
+10. [RoPE是一种β进制编码](https://spaces.ac.cn/archives/9675)
+11. [将β进制位置进行到底](https://spaces.ac.cn/archives/9706)
+12. [无限外推的ReRoPE？](https://spaces.ac.cn/archives/9708)
+13. [逆用Leaky ReRoPE](https://spaces.ac.cn/archives/9728)
+14. [当HWFA遇见ReRoPE](https://spaces.ac.cn/archives/9731)
+15. [Key归一化助力长度外推](https://www.spaces.ac.cn/archives/9859)
+16. [“复盘”长度外推技术](https://spaces.ac.cn/archives/9948)
+17. [多模态位置编码的简单思考](https://spaces.ac.cn/archives/10040)
+18. [RoPE的底数选择原则](https://spaces.ac.cn/archives/10122)
+19. [第二类旋转位置编码](https://spaces.ac.cn/archives/10862)
+20. [MLA究竟好在哪里？](https://spaces.ac.cn/archives/10907)
 {% endspoiler %}
