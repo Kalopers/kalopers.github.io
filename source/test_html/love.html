@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>To hzh</title>
+<style>
+  :root{
+    --flyDur: 4s;          /* 入场 */
+    --delayStep: 220ms;    /* 错峰 */
+    --heartHold: 2s;       /* 爱心停留（含心跳） */
+    --burstDur: 2.5s;      /* 炸开 */
+    --gap: 14px;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;font-family:"微软雅黑",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(1200px 600px at 50% 45%,#fff7fb 0%,#d7efff 100%);}
+  .stage{position:relative;width:100%;height:100%;isolation:isolate;}
+  .fx{position:absolute;inset:0;pointer-events:none;z-index:9;overflow:hidden}
+
+  /* 背景粉尘/柔光（整场15s） */
+  .dust,.dust::after{
+    position:absolute;inset:-40%;
+    background:
+      radial-gradient(circle at 20% 30%,rgba(255,255,255,.12),transparent 50%),
+      radial-gradient(circle at 80% 70%,rgba(255,255,255,.10),transparent 55%),
+      radial-gradient(circle at 50% 50%,rgba(255,255,255,.06),transparent 60%);
+    animation:drift 15s linear infinite;
+    mix-blend-mode:screen;
+  }
+  .dust::after{content:"";animation-direction:reverse;opacity:.7}
+  @keyframes drift{from{transform:translateY(0)}to{transform:translateY(-6%)}}
+
+  /* 心跳波纹+光环+闪白 */
+  .heartwave{position:absolute;left:50%;top:50%;width:16px;height:16px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,80,120,.8),rgba(255,80,120,0) 70%);
+    transform:translate(-50%,-50%) scale(0);animation:heartwave 1.8s ease-out forwards;}
+  @keyframes heartwave{0%{opacity:.9;transform:translate(-50%,-50%) scale(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(26)}}
+  .ring{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:999px;
+    box-shadow:0 0 0 2px rgba(255,80,120,.65),0 0 22px rgba(255,80,120,.45);
+    transform:translate(-50%,-50%) scale(.2);opacity:.95;animation:ring 1s cubic-bezier(.1,.7,.2,1) forwards;}
+  @keyframes ring{65%{transform:translate(-50%,-50%) scale(24);opacity:.45}100%{transform:translate(-50%,-50%) scale(30);opacity:0}}
+  .flash{position:absolute;inset:0;background:#fff;opacity:0;animation:flash .55s ease-in-out forwards}
+  @keyframes flash{0%{opacity:0}30%{opacity:.85}100%{opacity:0}}
+
+  /* 流星粒子 */
+  .spark{position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:999px;
+    transform:translate(-50%,-50%);filter:blur(.2px);opacity:0;
+    animation:spark var(--sdur,1300ms) cubic-bezier(.15,.65,.25,1.1) var(--sdelay,0ms) forwards;}
+  .spark::after{content:"";position:absolute;left:50%;top:50%;width:2px;height:18px;border-radius:2px;
+    transform:translate(-50%,-50%) rotate(var(--ang,0deg));
+    background:linear-gradient(to bottom,rgba(255,255,255,.85),rgba(255,255,255,0));opacity:0;
+    animation:tail 800ms ease-out var(--sdelay,0ms) forwards;}
+  @keyframes tail{0%{opacity:.55;transform:translate(-50%,-50%) rotate(var(--ang,0deg)) scaleY(.2)}100%{opacity:0;transform:translate(-50%,-50%) rotate(var(--ang,0deg)) scaleY(1)}}
+  @keyframes spark{12%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) translate(var(--sx),var(--sy))}}
+
+  /* 卡片 */
+  .msg{
+    position:absolute;left:50%;top:50%;padding:16px 24px;border-radius:18px;color:#fff;font-weight:700;
+    font-size:clamp(16px,3.5vmin,28px);text-shadow:0 2px 8px rgba(0,0,0,.3);
+    opacity:0;transform:translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(.86) rotate(var(--rot));
+    box-shadow:0 8px 26px rgba(0,0,0,.25);z-index:2;
+    background: var(--bg,linear-gradient(135deg,#ff758c,#ff7eb3));
+    animation:fly var(--flyDur) cubic-bezier(.25,.7,.3,1) var(--delay,0s) both;}
+  @keyframes fly{
+    0%{opacity:0;transform:translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(.86) rotate(var(--rot))}
+    18%{opacity:1}
+    65%{transform:translate(-50%,-50%) translate(calc(var(--hx)*.15),calc(var(--hy)*.15)) scale(1.04)}
+    100%{opacity:1;transform:translate(-50%,-50%) translate(var(--hx),var(--hy)) scale(1) rotate(0)}
+  }
+  .pulse{animation:pulse 620ms ease-in-out 2;background:linear-gradient(135deg,#ff4d6d,#ff0a54)!important}
+  @keyframes pulse{35%{transform:translate(-50%,-50%) translate(var(--hx),var(--hy)) scale(1.14)}70%{transform:translate(-50%,-50%) translate(var(--hx),var(--hy)) scale(1.02)}}
+
+  .burst{animation:burst var(--burstDur) cubic-bezier(.16,.67,.27,1.1) forwards}
+  @keyframes burst{
+    0%{opacity:1;transform:translate(-50%,-50%) translate(var(--hx),var(--hy))}
+    100%{opacity:1;transform:translate(-50%,-50%) translate(var(--bx),var(--by)) rotate(var(--brot))}
+  }
+
+  /* 网格 */
+  body[data-phase="grid"]{overflow:auto}
+  body[data-phase="grid"] .stage{position:absolute;inset:0;display:grid;grid-template-columns:repeat(6,1fr);
+    grid-auto-rows:minmax(110px,1fr);gap:var(--gap);padding:var(--gap)}
+  /* 允许 hover/入场动画 */
+  body[data-phase="grid"] .msg{
+    position:static;opacity:1;transform:none;animation:none;
+    display:flex;align-items:center;justify-content:center;border-radius:16px;min-height:110px;
+    will-change:transform,box-shadow;
+  }
+
+  /* Grid 阶段入场/呼吸/擦亮/纸屑 */
+  @keyframes gridPop{0%{opacity:0;transform:scale(.86) translateY(8px)}60%{opacity:1;transform:scale(1.04) translateY(-2px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+  @keyframes breathe{0%,100%{box-shadow:0 8px 26px rgba(0,0,0,.20),0 0 0 rgba(255,105,135,0)}50%{box-shadow:0 10px 30px rgba(0,0,0,.24),0 0 20px rgba(255,105,135,.08)}}
+  @keyframes shineSweep{from{transform:translateX(-120%) skewX(-18deg);opacity:0}45%{opacity:.35}to{transform:translateX(120%) skewX(-18deg);opacity:0}}
+
+  /* 初始隐藏（网格阶段逐批出现） */
+  body[data-phase="grid"] .msg.grid-hide{opacity:0;transform:scale(.86) translateY(8px)}
+  /* 被揭示后的弹入+呼吸 */
+  body[data-phase="grid"] .msg.grid-pop{animation:gridPop 600ms cubic-bezier(.2,.7,.2,1) both, breathe 6s ease-in-out infinite}
+
+  body[data-phase="grid"] .msg:hover, body[data-phase="grid"] .msg:focus{transform:translateY(-4px) scale(1.02)}
+  body[data-phase="grid"] .msg::before{content:"";position:absolute;top:0;bottom:0;left:-30%;width:30%;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);border-radius:inherit;filter:blur(1px);opacity:0;pointer-events:none}
+  body[data-phase="grid"] .msg:hover::before{opacity:1;animation:shineSweep 900ms ease-in-out}
+
+  .confetti{position:fixed;left:0;top:-12px;width:10px;height:14px;opacity:.95;transform:translateX(var(--cx,0)) rotate(var(--rot,0deg));
+    border-radius:2px;z-index:12;pointer-events:none;animation:confFall var(--cdur,2500ms) cubic-bezier(.2,.7,.2,1) var(--cdelay,0ms) forwards}
+  @keyframes confFall{0%{transform:translate(var(--cx,0),-12px) rotate(0deg)}70%{transform:translate(var(--cxEnd,0),70vh) rotate(260deg)}100%{transform:translate(calc(var(--cxEnd,0) + 2vw),100vh) rotate(520deg);opacity:0}}
+  
+  .replay{position:fixed;right:16px;bottom:16px;z-index:10;padding:10px 14px;border:none;border-radius:12px;
+    background:rgba(255,255,255,.5);backdrop-filter:blur(8px);color:#222;font-weight:700;cursor:pointer;box-shadow:0 5px 20px rgba(0,0,0,.25)}
+</style>
+</head>
+<body data-phase="intro">
+  <div class="stage" id="stage"></div>
+  <div class="fx" id="fx"></div>
+  <button class="replay" id="replay">重放</button>
+
+<script>
+/* ===== 改成自己喜欢的 ===== */
+const tips = [
+  '我想你',
+  '愿你安好',
+  '你真可爱',
+  '记得微笑',
+  '你值得被爱',
+  '抱抱你',
+  '别忘了好好吃饭',
+  '我在这里',
+  '你不孤单',
+  '光为你驻足',
+  '深呼吸',
+  '你很棒',
+  '多穿衣',
+  '加油呀',
+  '你值得最好的',
+  '今天也要开心',
+  '你本身就是光',
+  '愿你被温柔以待',
+  '别怕我在',
+  '你值得这世界的好',
+  '慢一点没关系',
+  '你的笑真好看',
+  '保持可爱',
+  '放轻松',
+  '任时光善待你',
+  '你会越来越好',
+  '梦想在路上',
+  '相信自己',
+  '出门带伞',
+  '喝点热汤',
+  '愿你平安喜乐',
+  '好梦常在',
+  '你是独一无二',
+  '阳光来了',
+  '愿今天幸运',
+  '你的努力会回响',
+  '夜色温柔',
+  '世界会善待你',
+  '深夜也有星光',
+  '你本身就闪光',
+  '永远有希望',
+  '别忘了休息',
+  '爱自己',
+  '你值得被珍惜',
+  '未来可期',
+  '温柔以待自己',
+  '今天也要元气满满',
+  '你超喜欢你自己',
+  '别怕犯错',
+  '雨后会晴',
+  '你值得所有美好',
+  '星河为你闪烁',
+  '继续前进',
+  '你的笑容最快',
+  '世界很大慢慢看',
+  '风吹来的都是好运',
+  '你是最美意外',
+  '拥抱这刻',
+  '喝杯奶茶吧'
+];
+
+const palettes = [
+  ['#ff758c','#ff7eb3'],['#a18cd1','#fbc2eb'],['#f6d365','#fda085'],
+  ['#84fab0','#8fd3f4'],['#f093fb','#f5576c'],['#4facfe','#00f2fe'],
+  ['#43e97b','#38f9d7'],['#fa709a','#fee140'],['#30cfd0','#330867'],['#5ee7df','#b490ca']
+];
+const dirs = [
+  {dx:'0vw',dy:'-75vh'},{dx:'0vw',dy:'75vh'},{dx:'-75vw',dy:'0vh'},{dx:'75vw',dy:'0vh'},
+  {dx:'-60vw',dy:'-60vh'},{dx:'60vw',dy:'-60vh'},{dx:'-60vw',dy:'60vh'},{dx:'60vw',dy:'60vh'}
+];
+
+/* ===== DOM/常量 ===== */
+const stage = document.getElementById('stage');
+const fx = document.getElementById('fx');
+const replay = document.getElementById('replay');
+const FLY_DUR = 4000, DELAY_STEP = 220, HEART_HOLD = 2000, BURST_DUR = 2500;
+
+const rand=(a,b)=>Math.random()*(b-a)+a;
+const pick=arr=>arr[Math.floor(Math.random()*arr.length)];
+const grad=()=>{const [a,b]=pick(palettes);return `linear-gradient(135deg,${a},${b})`};
+
+/* ===== 爱心点位（中心、偏高比例）===== */
+function heartPoints(n){
+  const pts=[], rx=18, ry=24, jitter=0.04; // ry>rx 防扁
+  for(let i=0;i<n;i++){
+    const t=i*(2*Math.PI/n);
+    const x=16*Math.sin(t)**3;
+    const y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+    const nx=x/16, ny=y/17;
+    const hx=(nx*rx + (Math.random()*2-1)*jitter).toFixed(2)+'vw';
+    const hy=((-ny)*ry + (Math.random()*2-1)*jitter).toFixed(2)+'vh';
+    pts.push({hx,hy});
+  }
+  return pts;
+}
+
+/* ===== FX层 ===== */
+function addDust(){ fx.appendChild(Object.assign(document.createElement('div'),{className:'dust'})); setTimeout(()=>fx.querySelector('.dust')?.remove(),15000); }
+function addRingWave(){ for(let k=0;k<2;k++){const r=document.createElement('div');r.className='ring';r.style.animationDelay=`${k*120}ms`;fx.appendChild(r);r.addEventListener('animationend',()=>r.remove());}
+  const hw=document.createElement('div');hw.className='heartwave';fx.appendChild(hw);hw.addEventListener('animationend',()=>hw.remove());}
+function addFlash(){const f=document.createElement('div');f.className='flash';fx.appendChild(f);f.addEventListener('animationend',()=>f.remove());}
+function addSparks(){
+  const count=Math.min(160, Math.max(80, Math.floor(tips.length*2.2)));
+  for(let i=0;i<count;i++){
+    const sp=document.createElement('div');sp.className='spark';
+    const ang=rand(0,360), rvw=rand(22,52), rvh=rand(15,38);
+    sp.style.setProperty('--sx',`${(Math.cos(ang*Math.PI/180)*rvw).toFixed(2)}vw`);
+    sp.style.setProperty('--sy',`${(Math.sin(ang*Math.PI/180)*rvh).toFixed(2)}vh`);
+    sp.style.setProperty('--ang',`${ang}deg`);
+    sp.style.setProperty('--sdur',`${rand(1200,1800)}ms`);
+    sp.style.setProperty('--sdelay',`${rand(0,1800)}ms`);
+    const [c1,c2]=pick(palettes); sp.style.background=`radial-gradient(circle at 40% 40%,${c1},${c2})`;
+    fx.appendChild(sp); sp.addEventListener('animationend',()=>sp.remove());
+  }
+}
+function boomFX(){ addDust(); addRingWave(); setTimeout(addFlash, 350); addSparks(); }
+
+/* ===== 主流程 ===== */
+function clearStage(){ stage.innerHTML=''; fx.innerHTML=''; document.body.setAttribute('data-phase','intro'); }
+function createMsg(i,target){
+  const el=document.createElement('div'); el.className='msg'; el.textContent=tips[i%tips.length];
+  const d=pick(dirs);
+  el.style.setProperty('--dx',d.dx); el.style.setProperty('--dy',d.dy);
+  el.style.setProperty('--hx',target.hx); el.style.setProperty('--hy',target.hy);
+  el.style.setProperty('--rot',`${rand(-50,50)}deg`); el.style.setProperty('--delay',`${i*(DELAY_STEP/1000)}s`);
+  el.style.setProperty('--bg',grad()); stage.appendChild(el); return el;
+}
+function flyIn(){
+  clearStage();
+  const targets=heartPoints(tips.length), nodes=[];
+  for(let i=0;i<tips.length;i++) nodes.push(createMsg(i,targets[i]));
+  const totalWait = DELAY_STEP*(tips.length-1) + FLY_DUR;            // 入场完
+  setTimeout(()=>{ nodes.forEach(n=>n.classList.add('pulse'));       // 心跳
+    setTimeout(()=>{ boomFX();                                       // 特效先起
+      setTimeout(()=>burst(nodes), 900);                              // 然后卡片爆开（无空白）
+    }, 500);
+  }, totalWait);
+}
+function burst(nodes){
+  document.body.setAttribute('data-phase','burst');
+  nodes.forEach((el,idx)=>{
+    el.classList.remove('pulse');
+    const a=rand(0,360)*Math.PI/180, rvw=rand(25,52), rvh=rand(18,38);
+    el.style.setProperty('--bx',`${(Math.cos(a)*rvw).toFixed(2)}vw`);
+    el.style.setProperty('--by',`${(Math.sin(a)*rvh).toFixed(2)}vh`);
+    el.style.setProperty('--brot',`${rand(-120,120)}deg`);
+    el.style.setProperty('--burstDur',`${BURST_DUR}ms`);
+    setTimeout(()=>el.classList.add('burst'), idx*14);
+  });
+  setTimeout(toGrid, BURST_DUR + 300);
+}
+
+/* === 网格阶段：分批渐进铺开（每批4~6个，约3~4秒完成） === */
+function toGrid(){
+  document.body.setAttribute('data-phase','grid');
+
+  const cards = Array.from(stage.querySelectorAll('.msg'));
+  // 初始全部隐藏状态
+  cards.forEach(el=>el.classList.add('grid-hide'));
+
+  // 纸屑雨（先来氛围）
+  gridFX();
+
+  // 分批揭示
+  let idx = 0;
+  const total = cards.length;
+  const tick = () => {
+    if(idx >= total) return;                 // 全部完成
+    const batch = Math.floor(rand(4,7));     // 每批 4~6 个
+    for(let k=0;k<batch && idx<total; k++, idx++){
+      const el = cards[idx];
+      el.classList.remove('grid-hide');
+      el.style.setProperty('--gdelay', `0ms`);
+      el.classList.add('grid-pop');
+    }
+    // 批次间隔：280~420ms，整体约 3~4s 完成
+    setTimeout(tick, rand(280,420));
+  };
+  tick();
+}
+function gridFX(){
+  const colors = ['#ff4d6d','#ff758c','#ff9eb5','#a18cd1','#8fd3f4','#f6d365','#fda085','#43e97b','#38f9d7','#ffd166'];
+  const total = Math.min(120, Math.max(60, Math.floor(tips.length*1.5)));
+  for(let i=0;i<total;i++){
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    const x = Math.random()*100;
+    const drift = (Math.random()*16-8);
+    c.style.left = x + 'vw';
+    c.style.setProperty('--cx','0vw');
+    c.style.setProperty('--cxEnd', drift.toFixed(2)+'vw');
+    c.style.setProperty('--rot', (Math.random()*360).toFixed(1)+'deg');
+    c.style.setProperty('--cdelay', (Math.random()*600).toFixed(0)+'ms');
+    c.style.setProperty('--cdur', (2000 + Math.random()*900).toFixed(0)+'ms');
+    c.style.background = colors[i % colors.length];
+    document.body.appendChild(c);
+    c.addEventListener('animationend', ()=> c.remove());
+  }
+}
+
+replay.addEventListener('click', flyIn);
+flyIn(); // 初次播放
+</script>
+</body>
+</html>
